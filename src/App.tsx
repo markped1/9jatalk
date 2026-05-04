@@ -313,11 +313,27 @@ export default function App() {
     unsubSignals.current?.();
     unsubSignals.current = listenSignals(uid, (signal) => {
       if (signal.type === 'call:incoming') {
-        // Play ring sound for incoming call
-        const audio = new Audio('https://www.soundjay.com/phone/sounds/phone-ringing-1.mp3');
-        audio.loop = true;
-        audio.play().catch(() => {});
-        (window as any)._ringAudio = audio;
+        // Play ring sound for incoming call using Web Audio API
+        try {
+          const ctx = new AudioContext();
+          const playRing = () => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.4, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.8);
+          };
+          playRing();
+          const ringInterval = setInterval(playRing, 2000);
+          (window as any)._ringInterval = ringInterval;
+          (window as any)._ringCtx = ctx;
+        } catch (e) {}
         setCalling({
           active: true, incoming: true,
           type: signal.payload.callType,
@@ -326,12 +342,12 @@ export default function App() {
         });
       } else if (signal.type === 'call:answer') {
         // Stop ring
-        if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
+        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
         const peer = peersRef.current.get(signal.fromId);
         if (peer) peer.signal(signal.payload.sdp);
         setCalling(prev => prev ? { ...prev, incoming: false } : null);
       } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
-        if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
+        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
         cleanupCall();
       }
     });
@@ -455,6 +471,55 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
+  // Pick contacts from device and find who's on 9jaTalk
+  const handlePickContacts = async () => {
+    try {
+      if (!(navigator as any).contacts) {
+        alert('Contact picker not supported on this device. Enter the number manually.');
+        return;
+      }
+      const contacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: true });
+      if (!contacts || contacts.length === 0) return;
+
+      const found: Chat[] = [];
+      for (const contact of contacts) {
+        for (const tel of (contact.tel || [])) {
+          const cleaned = tel.replace(/\s+/g, '');
+          const userData = await searchUserByPhone(cleaned);
+          if (userData && !userData.virtual) {
+            found.push({
+              id: userData.id,
+              name: contact.name?.[0] || userData.username || cleaned,
+              avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
+              lastMessage: '',
+              time: 'Now',
+              unread: 0
+            });
+          }
+        }
+      }
+
+      if (found.length === 0) {
+        alert('None of your selected contacts are on 9jaTalk yet.');
+        return;
+      }
+
+      // Add all found contacts to chat list
+      setChats(prev => {
+        const existing = new Set(prev.map(c => c.id));
+        const newOnes = found.filter(c => !existing.has(c.id));
+        return [...newOnes, ...prev];
+      });
+
+      // Open first found contact
+      setActiveChat(found[0]);
+      setShowNewChat(false);
+      setIsSidebarOpen(false);
+    } catch (err) {
+      console.error('Contact picker failed', err);
+    }
+  };
+
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!groupName || !userId) return;
@@ -543,7 +608,9 @@ export default function App() {
   };
 
   const cleanupCall = () => {
-    // Stop any ring audio
+    // Stop ring
+    if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+    if ((window as any)._ringCtx) { (window as any)._ringCtx.close().catch(() => {}); (window as any)._ringCtx = null; }
     if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
     localStream?.getTracks().forEach(t => t.stop());
     processedStream?.getTracks().forEach(t => t.stop());
@@ -567,11 +634,27 @@ export default function App() {
 
   const initiateCall = async (type: 'voice' | 'video') => {
     if (!activeChat || !userId) return;
-    // Play outgoing ring
-    const ringAudio = new Audio('https://www.soundjay.com/phone/sounds/phone-ringing-3.mp3');
-    ringAudio.loop = true;
-    ringAudio.play().catch(() => {});
-    (window as any)._ringAudio = ringAudio;
+    // Play outgoing ring using Web Audio API (no external URL needed)
+    try {
+      const ctx = new AudioContext();
+      const playRing = () => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.setValueAtTime(480, ctx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 1);
+      };
+      playRing();
+      const ringInterval = setInterval(playRing, 3000);
+      (window as any)._ringInterval = ringInterval;
+      (window as any)._ringCtx = ctx;
+    } catch (e) {}
+
     const rawStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
     setLocalStream(rawStream);
     const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
@@ -864,6 +947,18 @@ export default function App() {
                 <input type="tel" placeholder="+234 801 234 5678" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751]" value={newChatNumber} onChange={e=>setNewChatNumber(e.target.value)} autoFocus/>
                 <button type="submit" className="w-full py-3 rounded-xl bg-[#008751] text-white font-semibold">Start Chat</button>
               </form>
+              <div className="mt-3">
+                <div className="flex items-center gap-3 my-3">
+                  <div className="flex-1 h-px bg-gray-200"/>
+                  <span className="text-xs text-gray-400">or</span>
+                  <div className="flex-1 h-px bg-gray-200"/>
+                </div>
+                <button onClick={handlePickContacts} className="w-full py-3 rounded-xl border-2 border-[#008751] text-[#008751] font-semibold flex items-center justify-center gap-2">
+                  <Users className="w-5 h-5"/>
+                  Find from Contacts
+                </button>
+                <p className="text-xs text-gray-400 text-center mt-2">Shows only contacts who are on 9jaTalk</p>
+              </div>
               <div style={{height:'env(safe-area-inset-bottom)'}}/>
             </motion.div>
           </motion.div>
