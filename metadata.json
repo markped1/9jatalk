@@ -1,0 +1,6 @@
+{
+  "name": "9jaTalk - Real-time Messaging",
+  "description": "A high-performance, real-time messaging application with end-to-end encryption, presence indicators, and media handling. Designed by Thompson Obosa.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": []
+}
