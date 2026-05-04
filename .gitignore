@@ -6,3 +6,22 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Temp build scripts
+fix.mjs
+patch.cjs
+patch2.cjs
+find.cjs
+build_app.cjs
+build_app.mjs
+src/ui.js
+src/write_ui.mjs
+src/ui.cjs
+src/App_clean.tsx
+src/_app_rest.tsx
+
+# Database
+*.db
+
+# Vercel
+.vercel
