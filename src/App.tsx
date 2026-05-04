@@ -11,7 +11,7 @@ import Peer from 'simple-peer';
 import {
   sendOTP, verifyOTP, onAuthChange, getUserProfile, updateUserProfile,
   searchUserByPhone, setOnline,
-  getChatId, sendMessage as fbSendMessage, listenMessages,
+  getChatId, sendMessage as fbSendMessage, listenMessages, listenUserChats,
   markMessagesRead, reactToMessage, setTyping, listenTyping,
   postStatus, listenStatuses, createGroup, getGroupMembers,
   listenUserGroups, sendSignal, listenSignals, uploadFile,
@@ -180,6 +180,17 @@ export default function App() {
     };
     setChats([supportChat]);
 
+    // Listen to incoming chats from other users
+    const unsubUserChats = listenUserChats(userId, (incomingChats) => {
+      setChats(prev => {
+        const groups = prev.filter(c => c.isGroup);
+        const support = prev.find(c => c.id === 'support') || supportChat;
+        // Merge incoming chats, avoid duplicates
+        const merged = [support, ...incomingChats.filter(c => c.id !== 'support'), ...groups];
+        return merged;
+      });
+    });
+
     // Listen to groups
     const unsub = listenUserGroups(userId, (groups) => {
       const groupChats: Chat[] = groups.map(g => ({
@@ -196,7 +207,7 @@ export default function App() {
         return [...nonGroup, ...groupChats];
       });
     });
-    return () => unsub();
+    return () => { unsub(); unsubUserChats(); };
   }, [userId]);
 
   // â”€â”€â”€ Statuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -636,7 +647,7 @@ export default function App() {
   }
 
   return (
-    <div className={'flex h-screen bg-[#f0f2f5] overflow-hidden ' + (isPrivacyProtected ? 'blur-sm' : '')}>
+    <div className={'flex h-[100dvh] bg-[#f0f2f5] overflow-hidden ' + (isPrivacyProtected ? 'blur-sm' : '')}>
       <div className={(isSidebarOpen ? 'flex' : 'hidden md:flex') + ' w-full md:w-[340px] flex-col bg-white border-r border-gray-200 z-10 flex-shrink-0'}>
         <div className='bg-[#f0f2f5] px-4 py-3 flex items-center justify-between'>
           <div className='flex items-center gap-3'>

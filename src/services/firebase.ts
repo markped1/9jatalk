@@ -247,6 +247,36 @@ export const listenMessages = (
   return () => off(msgsRef);
 };
 
+// Listen for all chats involving this user (incoming messages from others)
+export const listenUserChats = (
+  userId: string,
+  cb: (chats: any[]) => void
+) => {
+  const chatMetaRef = ref(db, `chatMeta/${userId}`);
+  onValue(chatMetaRef, async snap => {
+    if (!snap.exists()) { cb([]); return; }
+    const chatData = snap.val() as Record<string, any>;
+    const chatList = await Promise.all(
+      Object.entries(chatData).map(async ([otherId, meta]: any) => {
+        const profile = await getUserProfile(otherId);
+        return {
+          id: otherId,
+          name: profile?.username || profile?.phoneNumber || `User ${otherId}`,
+          avatar: profile?.avatarUrl || `https://i.pravatar.cc/150?u=${otherId}`,
+          lastMessage: meta.lastMessage || '',
+          time: meta.lastMessageTime
+            ? new Date(meta.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '',
+          unread: meta.unread || 0,
+          online: false
+        };
+      })
+    );
+    cb(chatList);
+  });
+  return () => off(chatMetaRef);
+};
+
 export const markMessagesRead = async (chatId: string, readerId: string) => {
   const snap = await get(ref(db, `messages/${chatId}`));
   if (!snap.exists()) return;
