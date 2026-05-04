@@ -1,0 +1,648 @@
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  MessageSquare, CircleDashed, Phone, Video, MoreVertical, Search, Plus,
+  Send, Smile, Paperclip, Check, CheckCheck, ArrowLeft, X, Mic,
+  Video as VideoIcon, PhoneOff, Square, Volume2, VolumeX, Settings,
+  Bell, Lock, User as UserIcon, Shield, HelpCircle, Database, Users,
+  Laptop, Smartphone, Trash2, Sparkles
+} from 'lucide-react';
+import Peer from 'simple-peer';
+import {
+  sendOTP, verifyOTP, onAuthChange, getUserProfile, updateUserProfile,
+  searchUserByPhone, setOnline,
+  getChatId, sendMessage as fbSendMessage, listenMessages, listenUserChats,
+  markMessagesRead, reactToMessage, setTyping, listenTyping,
+  postStatus, listenStatuses, createGroup, getGroupMembers,
+  listenUserGroups, sendSignal, listenSignals, uploadFile,
+  getAiSuggestions, translateText
+} from './services/firebase';
+import type { ConfirmationResult } from 'firebase/auth';
+
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+type Message = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: number;
+  status: 'sent' | 'delivered' | 'read';
+  type?: 'text' | 'image' | 'audio' | 'video';
+  reactions?: Record<string, string>;
+  expiresAt?: number | null;
+  isGroup?: boolean;
+};
+
+type Chat = {
+  id: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  online?: boolean;
+  typing?: boolean;
+  isGroup?: boolean;
+  disappearingTimer?: number;
+};
+
+// â”€â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export default function App() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [otpError, setOtpError] = useState('');
+
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
+
+  const [statuses, setStatuses] = useState<any[]>([]);
+  const [viewingStatus, setViewingStatus] = useState<any | null>(null);
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'account' | 'privacy' | 'notifications' | 'backup'>('account');
+
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [newChatNumber, setNewChatNumber] = useState('');
+  const [groupName, setGroupName] = useState('');
+  const [chatMembers, setChatMembers] = useState<any[]>([]);
+  const [showMembers, setShowMembers] = useState(false);
+
+  const [isPrivacyProtected, setIsPrivacyProtected] = useState(false);
+
+  // Voice recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
+  // Calls
+  const [calling, setCalling] = useState<{
+    type: 'voice' | 'video'; active: boolean; incoming?: boolean;
+    remoteId?: string; groupId?: string; signal?: any;
+  } | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [showEffectsBar, setShowEffectsBar] = useState(false);
+  const [videoEffects, setVideoEffects] = useState({
+    brightness: 100, contrast: 100, saturate: 100, sepia: 0, blur: 0, hueRotate: 0
+  });
+  const videoEffectsRef = useRef(videoEffects);
+  useEffect(() => { videoEffectsRef.current = videoEffects; }, [videoEffects]);
+
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
+  const peersRef = useRef<Map<string, any>>(new Map());
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const processingVideoRef = useRef<HTMLVideoElement | null>(null);
+  const processingLoopRef = useRef<number | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Unsubscribe refs
+  const unsubMessages = useRef<(() => void) | null>(null);
+  const unsubTyping = useRef<(() => void) | null>(null);
+  const unsubSignals = useRef<(() => void) | null>(null);
+
+  // â”€â”€â”€ Auth state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    const unsub = onAuthChange(async (user) => {
+      if (user) {
+        const profile = await getUserProfile(user.uid);
+        if (profile) {
+          setUserId(user.uid);
+          setUserProfile(profile);
+          setOnline(user.uid);
+          setupSignalListener(user.uid);
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // â”€â”€â”€ Privacy protection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    if (!userProfile?.screenshotProtection) { setIsPrivacyProtected(false); return; }
+    const onBlur = () => setIsPrivacyProtected(true);
+    const onFocus = () => setIsPrivacyProtected(false);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'p')) {
+        e.preventDefault();
+        alert('Screen capture is restricted.');
+      }
+    };
+    const onCtx = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA') e.preventDefault();
+    };
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('contextmenu', onCtx);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('contextmenu', onCtx);
+    };
+  }, [userProfile?.screenshotProtection]);
+
+  // â”€â”€â”€ Load chats (support bot + groups) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    if (!userId) return;
+
+    // Always show support chat
+    const supportChat: Chat = {
+      id: 'support',
+      name: '9jaTalk Support',
+      avatar: 'https://i.pravatar.cc/150?u=support',
+      lastMessage: 'Welcome to 9jaTalk!',
+      time: '10:00 AM',
+      unread: 0,
+      online: true
+    };
+    setChats([supportChat]);
+
+    // Listen to incoming chats from other users
+    const unsubUserChats = listenUserChats(userId, (incomingChats) => {
+      setChats(prev => {
+        const groups = prev.filter(c => c.isGroup);
+        const support = prev.find(c => c.id === 'support') || supportChat;
+        // Merge incoming chats, avoid duplicates
+        const merged = [support, ...incomingChats.filter(c => c.id !== 'support'), ...groups];
+        return merged;
+      });
+    });
+
+    // Listen to groups
+    const unsub = listenUserGroups(userId, (groups) => {
+      const groupChats: Chat[] = groups.map(g => ({
+        id: g.id,
+        name: g.name,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name)}&background=008751&color=fff`,
+        lastMessage: g.lastMessage || 'Group created',
+        time: g.lastMessageTime ? new Date(g.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+        unread: 0,
+        isGroup: true
+      }));
+      setChats(prev => {
+        const nonGroup = prev.filter(c => !c.isGroup);
+        return [...nonGroup, ...groupChats];
+      });
+    });
+    return () => { unsub(); unsubUserChats(); };
+  }, [userId]);
+
+  // â”€â”€â”€ Statuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    const unsub = listenStatuses(setStatuses);
+    return () => unsub();
+  }, []);
+
+  // â”€â”€â”€ Messages listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    if (!activeChat || !userId) return;
+    unsubMessages.current?.();
+    unsubTyping.current?.();
+
+    const chatId = activeChat.isGroup
+      ? activeChat.id
+      : getChatId(userId, activeChat.id);
+
+    unsubMessages.current = listenMessages(chatId, (msgs) => {
+      // Filter expired
+      const now = Date.now();
+      setMessages(msgs.filter(m => !m.expiresAt || m.expiresAt > now));
+      // Mark as read
+      markMessagesRead(chatId, userId);
+      // Reset unread
+      setChats(prev => prev.map(c => c.id === activeChat.id ? { ...c, unread: 0 } : c));
+    });
+
+    unsubTyping.current = listenTyping(chatId, userId, (typingUid) => {
+      setChats(prev => prev.map(c =>
+        c.id === activeChat.id ? { ...c, typing: !!typingUid } : c
+      ));
+    });
+
+    return () => {
+      unsubMessages.current?.();
+      unsubTyping.current?.();
+    };
+  }, [activeChat?.id, userId]);
+
+  // â”€â”€â”€ Scroll to bottom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
+
+  // â”€â”€â”€ Local video ref â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = processedStream || localStream;
+    }
+  }, [localStream, processedStream, calling?.active]);
+
+  // â”€â”€â”€ Group members â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    if (activeChat?.isGroup) {
+      getGroupMembers(activeChat.id).then(setChatMembers);
+    } else {
+      setChatMembers([]);
+    }
+  }, [activeChat?.id]);
+
+  // â”€â”€â”€ AI suggestions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (!activeChat || messages.length === 0 || !userId) return;
+      const last = messages[messages.length - 1];
+      if (last.senderId === userId) { setAiSuggestions([]); return; }
+      const lastFew = messages.slice(-5).map(m => m.content);
+      const suggestions = await getAiSuggestions(lastFew);
+      setAiSuggestions(suggestions);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [messages.length, activeChat?.id]);
+
+  // â”€â”€â”€ Disappearing messages cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages(prev => prev.filter(m => !m.expiresAt || m.expiresAt > Date.now()));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // â”€â”€â”€ Recording timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  useEffect(() => {
+    let interval: any;
+    if (isRecording) interval = setInterval(() => setRecordingDuration(d => d + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  // â”€â”€â”€ WebRTC signal listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const setupSignalListener = (uid: string) => {
+    unsubSignals.current?.();
+    unsubSignals.current = listenSignals(uid, (signal) => {
+      if (signal.type === 'call:incoming') {
+        setCalling({
+          active: true, incoming: true,
+          type: signal.payload.callType,
+          remoteId: signal.fromId,
+          signal: signal.payload.sdp
+        });
+      } else if (signal.type === 'call:answer') {
+        const peer = peersRef.current.get(signal.fromId);
+        if (peer) peer.signal(signal.payload.sdp);
+        setCalling(prev => prev ? { ...prev, incoming: false } : null);
+      } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
+        cleanupCall();
+      }
+    });
+  };
+
+  const handleSendOTP = async (e) => {
+    e.preventDefault(); if (phoneNumber.length < 8) return;
+    setLoginLoading(true); setOtpError('');
+    try { const result = await sendOTP(phoneNumber, 'recaptcha-container'); setConfirmationResult(result); setOtpSent(true); }
+    catch (err) { setOtpError(err.message || 'Failed to send OTP.'); }
+    finally { setLoginLoading(false); }
+  };
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault(); if (!confirmationResult || otp.length < 4) return;
+    setLoginLoading(true); setOtpError('');
+    try { const user = await verifyOTP(confirmationResult, otp); const profile = await getUserProfile(user.uid); setUserId(user.uid); setUserProfile(profile); setOnline(user.uid); setupSignalListener(user.uid); }
+    catch (err) { setOtpError('Invalid OTP. Please try again.'); }
+    finally { setLoginLoading(false); }
+  };
+
+  // â”€â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim() || !activeChat || !userId) return;
+    const text = inputText;
+    setInputText('');
+    const chatId = activeChat.isGroup ? activeChat.id : getChatId(userId, activeChat.id);
+    setTyping(chatId, userId, false);
+    await fbSendMessage(userId, activeChat.id, text, 'text', !!activeChat.isGroup, activeChat.disappearingTimer || 0);
+    setChats(prev => prev.map(c =>
+      c.id === activeChat.id ? { ...c, lastMessage: text, time: 'Just now' } : c
+    ));
+  };
+
+  const handleTyping = (text: string) => {
+    setInputText(text);
+    if (activeChat && userId) {
+      const chatId = activeChat.isGroup ? activeChat.id : getChatId(userId, activeChat.id);
+      setTyping(chatId, userId, text.length > 0);
+    }
+  };
+
+  // â”€â”€â”€ File upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChat || !userId) return;
+    try {
+      const url = await uploadFile(file, 'media');
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      await fbSendMessage(userId, activeChat.id, url, type, !!activeChat.isGroup);
+    } catch (err) { console.error('Upload failed', err); }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+    try {
+      const url = await uploadFile(file, 'avatars');
+      const updated = await updateUserProfile(userId, { avatarUrl: url });
+      setUserProfile(updated);
+    } catch (err) { console.error('Avatar upload failed', err); }
+  };
+
+  const handlePostStatus = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+    try {
+      const url = await uploadFile(file, 'statuses');
+      const type = file.type.startsWith('video') ? 'video' : 'image';
+      await postStatus(userId, url, type);
+    } catch (err) { console.error('Status post failed', err); }
+  };
+
+  // â”€â”€â”€ Voice recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const file = new File([blob], 'voice_note.webm', { type: 'audio/webm' });
+        if (activeChat && userId) {
+          const url = await uploadFile(file, 'audio');
+          await fbSendMessage(userId, activeChat.id, url, 'audio', !!activeChat.isGroup);
+        }
+        stream.getTracks().forEach(t => t.stop());
+      };
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setRecordingDuration(0);
+    } catch (err) { console.error('Recording failed', err); }
+  };
+
+  const stopRecording = () => { mediaRecorder?.stop(); setIsRecording(false); };
+
+  // â”€â”€â”€ New chat / group â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleStartNewChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newChatNumber.length < 6) return;
+    const userData = await searchUserByPhone(newChatNumber);
+    if (!userData) return;
+    const newChat: Chat = {
+      id: userData.id,
+      name: userData.username || `User ${newChatNumber}`,
+      avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
+      lastMessage: '',
+      time: 'Now',
+      unread: 0
+    };
+    setChats(prev => prev.find(c => c.id === newChat.id) ? prev : [newChat, ...prev]);
+    setActiveChat(newChat);
+    setShowNewChat(false);
+    setNewChatNumber('');
+    setIsSidebarOpen(false);
+  };
+
+  const handleCreateGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!groupName || !userId) return;
+    const groupId = await createGroup(groupName, userId, []);
+    const newGroup: Chat = {
+      id: groupId,
+      name: groupName,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=008751&color=fff`,
+      lastMessage: 'Group created',
+      time: 'Now',
+      unread: 0,
+      isGroup: true
+    };
+    setChats(prev => [newGroup, ...prev]);
+    setActiveChat(newGroup);
+    setShowGroupModal(false);
+    setGroupName('');
+    setIsSidebarOpen(false);
+  };
+
+  const selectChat = (chat: Chat) => {
+    setActiveChat(chat);
+    setIsSidebarOpen(false);
+    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c));
+  };
+
+  // â”€â”€â”€ Profile update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleUpdateProfile = async (updates: any) => {
+    if (!userId) return;
+    const updated = await updateUserProfile(userId, updates);
+    setUserProfile(updated);
+  };
+
+  // â”€â”€â”€ Reactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleReact = async (messageId: string, emoji: string) => {
+    if (!activeChat || !userId) return;
+    const chatId = activeChat.isGroup ? activeChat.id : getChatId(userId, activeChat.id);
+    await reactToMessage(chatId, messageId, userId, emoji);
+  };
+
+  // â”€â”€â”€ Translation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleTranslate = async (msgId: string, text: string) => {
+    setTranslatingId(msgId);
+    const translated = await translateText(text, 'English');
+    setTranslatedMessages(prev => ({ ...prev, [msgId]: translated }));
+    setTranslatingId(null);
+  };
+
+  // â”€â”€â”€ Disappearing timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const setChatDisappearingTimer = async (seconds: number) => {
+    if (!activeChat) return;
+    setChats(prev => prev.map(c =>
+      c.id === activeChat.id ? { ...c, disappearingTimer: seconds } : c
+    ));
+    setActiveChat(prev => prev ? { ...prev, disappearingTimer: seconds } : prev);
+  };
+
+  // â”€â”€â”€ WebRTC calls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const getEnhancedStream = (rawStream: MediaStream) => {
+    if (rawStream.getVideoTracks().length === 0) return rawStream;
+    const canvas = document.createElement('canvas');
+    const settings = rawStream.getVideoTracks()[0].getSettings();
+    canvas.width = settings.width || 640;
+    canvas.height = settings.height || 480;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return rawStream;
+    const v = document.createElement('video');
+    v.srcObject = rawStream; v.muted = true; v.play().catch(console.error);
+    processingVideoRef.current = v;
+    const process = () => {
+      const f = videoEffectsRef.current;
+      ctx.filter = `brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%) sepia(${f.sepia}%) blur(${f.blur}px) hue-rotate(${f.hueRotate}deg)`;
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      processingLoopRef.current = requestAnimationFrame(process);
+    };
+    process();
+    const canvasStream = canvas.captureStream(30);
+    const result = new MediaStream([canvasStream.getVideoTracks()[0], rawStream.getAudioTracks()[0]]);
+    setProcessedStream(result);
+    return result;
+  };
+
+  const cleanupCall = () => {
+    localStream?.getTracks().forEach(t => t.stop());
+    processedStream?.getTracks().forEach(t => t.stop());
+    if (processingLoopRef.current) cancelAnimationFrame(processingLoopRef.current);
+    if (processingVideoRef.current) { processingVideoRef.current.pause(); processingVideoRef.current.srcObject = null; }
+    peersRef.current.forEach(p => p.destroy());
+    peersRef.current.clear();
+    setLocalStream(null); setProcessedStream(null);
+    setRemoteStreams(new Map()); setCalling(null);
+    setIsMuted(false); setIsVideoOff(false);
+  };
+
+  const initiateCall = async (type: 'voice' | 'video') => {
+    if (!activeChat || !userId) return;
+    const rawStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+    setLocalStream(rawStream);
+    const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
+    const createPeer = (targetId: string) => {
+      const peer = new Peer({ initiator: true, trickle: false, stream });
+      peer.on('signal', (sdp: any) => sendSignal(userId, targetId, 'call:incoming', { callType: type, sdp }));
+      peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(targetId, remote))));
+      peersRef.current.set(targetId, peer);
+    };
+    if (activeChat.isGroup) {
+      chatMembers.forEach(m => { if (m.id !== userId) createPeer(m.id); });
+      setCalling({ type, active: true, incoming: false, groupId: activeChat.id });
+    } else {
+      createPeer(activeChat.id);
+      setCalling({ type, active: true, incoming: false, remoteId: activeChat.id });
+    }
+  };
+
+  const answerCall = async () => {
+    if (!calling?.remoteId || !userId) return;
+    const rawStream = await navigator.mediaDevices.getUserMedia({ video: calling.type === 'video', audio: true });
+    setLocalStream(rawStream);
+    const stream = calling.type === 'video' ? getEnhancedStream(rawStream) : rawStream;
+    const peer = new Peer({ initiator: false, trickle: false, stream });
+    peer.on('signal', (sdp: any) => sendSignal(userId, calling.remoteId!, 'call:answer', { sdp }));
+    peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(calling.remoteId!, remote))));
+    if (calling.signal) peer.signal(calling.signal);
+    peersRef.current.set(calling.remoteId, peer);
+    setCalling(prev => prev ? { ...prev, incoming: false } : null);
+  };
+
+  const rejectCall = () => {
+    if (calling?.remoteId && userId) sendSignal(userId, calling.remoteId, 'call:reject', {});
+    cleanupCall();
+  };
+
+  const endCall = () => {
+    if (calling?.remoteId && userId) sendSignal(userId, calling.remoteId, 'call:end', {});
+    cleanupCall();
+  };
+
+  const toggleMute = () => {
+    const track = localStream?.getAudioTracks()[0];
+    if (track) { track.enabled = !track.enabled; setIsMuted(!track.enabled); }
+  };
+
+  const toggleVideo = () => {
+    const track = localStream?.getVideoTracks()[0];
+    if (track) { track.enabled = !track.enabled; setIsVideoOff(!track.enabled); }
+  };
+
+  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const formatTime = (ts: number) =>
+    new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  // â”€â”€â”€ Login Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center"
+        >
+          <div className="w-16 h-16 bg-[#008751] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-200">
+            <MessageSquare className="text-white w-8 h-8" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome to 9jaTalk</h1>
+          <p className="text-gray-500 mb-6">{otpSent ? 'Enter the OTP sent to ' + phoneNumber : 'Enter your phone number to get started'}</p>
+          <div id="recaptcha-container"></div>
+          {!otpSent ? (
+            <form onSubmit={handleSendOTP} className="space-y-4">
+              <input type="tel" placeholder="+234 801 234 5678" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)}/>
+              {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
+              <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
+                {loginLoading ? 'Sending OTP...' : 'Send OTP'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyOTP} className="space-y-4">
+              <div className="flex gap-2 justify-center">
+                <input type="text" inputMode="numeric" maxLength={6} placeholder="Enter 6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] text-center text-2xl font-bold tracking-widest" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/>
+              </div>
+              {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
+              <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
+                {loginLoading ? 'Verifying...' : 'Verify OTP'}
+              </button>
+              <button type="button" onClick={()=>{setOtpSent(false);setOtp('');setOtpError('');}} className="w-full text-gray-500 text-sm py-2 hover:text-gray-700">
+                Change number
+              </button>
+            </form>
+          )}
+          <p className="mt-6 text-xs text-gray-400">By continuing, you agree to our Terms of Service and Privacy Policy.</p>
+          <p className="mt-4 text-[10px] text-gray-300">Designed by Thompson Obosa</p>
+        </motion.div>
+      </div>
+    );
+  }
+
