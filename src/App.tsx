@@ -313,6 +313,11 @@ export default function App() {
     unsubSignals.current?.();
     unsubSignals.current = listenSignals(uid, (signal) => {
       if (signal.type === 'call:incoming') {
+        // Play ring sound for incoming call
+        const audio = new Audio('https://www.soundjay.com/phone/sounds/phone-ringing-1.mp3');
+        audio.loop = true;
+        audio.play().catch(() => {});
+        (window as any)._ringAudio = audio;
         setCalling({
           active: true, incoming: true,
           type: signal.payload.callType,
@@ -320,10 +325,13 @@ export default function App() {
           signal: signal.payload.sdp
         });
       } else if (signal.type === 'call:answer') {
+        // Stop ring
+        if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
         const peer = peersRef.current.get(signal.fromId);
         if (peer) peer.signal(signal.payload.sdp);
         setCalling(prev => prev ? { ...prev, incoming: false } : null);
       } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
+        if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
         cleanupCall();
       }
     });
@@ -535,6 +543,8 @@ export default function App() {
   };
 
   const cleanupCall = () => {
+    // Stop any ring audio
+    if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
     localStream?.getTracks().forEach(t => t.stop());
     processedStream?.getTracks().forEach(t => t.stop());
     if (processingLoopRef.current) cancelAnimationFrame(processingLoopRef.current);
@@ -546,13 +556,27 @@ export default function App() {
     setIsMuted(false); setIsVideoOff(false);
   };
 
+  const iceConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' }
+    ]
+  };
+
   const initiateCall = async (type: 'voice' | 'video') => {
     if (!activeChat || !userId) return;
+    // Play outgoing ring
+    const ringAudio = new Audio('https://www.soundjay.com/phone/sounds/phone-ringing-3.mp3');
+    ringAudio.loop = true;
+    ringAudio.play().catch(() => {});
+    (window as any)._ringAudio = ringAudio;
     const rawStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
     setLocalStream(rawStream);
     const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
     const createPeer = (targetId: string) => {
-      const peer = new Peer({ initiator: true, trickle: false, stream });
+      const peer = new Peer({ initiator: true, trickle: true, stream, config: iceConfig });
       peer.on('signal', (sdp: any) => sendSignal(userId, targetId, 'call:incoming', { callType: type, sdp }));
       peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(targetId, remote))));
       peersRef.current.set(targetId, peer);
@@ -571,7 +595,7 @@ export default function App() {
     const rawStream = await navigator.mediaDevices.getUserMedia({ video: calling.type === 'video', audio: true });
     setLocalStream(rawStream);
     const stream = calling.type === 'video' ? getEnhancedStream(rawStream) : rawStream;
-    const peer = new Peer({ initiator: false, trickle: false, stream });
+    const peer = new Peer({ initiator: false, trickle: true, stream, config: iceConfig });
     peer.on('signal', (sdp: any) => sendSignal(userId, calling.remoteId!, 'call:answer', { sdp }));
     peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(calling.remoteId!, remote))));
     if (calling.signal) peer.signal(calling.signal);
