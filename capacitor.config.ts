@@ -4,10 +4,7 @@ const config: CapacitorConfig = {
   appId: 'com.njatalk.app',
   appName: '9jaTalk',
   webDir: 'dist',
-  server: {
-    url: 'https://9jatalk.vercel.app',
-    cleartext: false,
-  },
+  // No server.url - loads from local dist folder (true native app)
   android: {
     allowMixedContent: false,
     backgroundColor: '#008751',
@@ -26,9 +23,6 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
     },
-    Microphone: {
-      permissions: ['microphone', 'camera']
-    }
   },
 };
 
