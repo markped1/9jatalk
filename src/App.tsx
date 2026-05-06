@@ -956,21 +956,54 @@ export default function App() {
           </motion.div>
         )}
         {showNewChat&&(
-          <motion.div key="nc" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-40 bg-black/50 flex items-end" onClick={()=>setShowNewChat(false)}>
+          <motion.div key="nc" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[100] bg-black/50 flex items-end" onClick={()=>setShowNewChat(false)}>
             <motion.div initial={{y:300}} animate={{y:0}} exit={{y:300}} className="bg-white rounded-t-3xl p-6 w-full" onClick={e=>e.stopPropagation()}>
               <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4"/>
               <h2 className="text-lg font-bold mb-4">New Chat</h2>
-              <form onSubmit={handleStartNewChat} className="space-y-3">
-                <input type="tel" placeholder="+234 801 234 5678" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751]" value={newChatNumber} onChange={e=>setNewChatNumber(e.target.value)} autoFocus/>
-                <button type="submit" className="w-full py-3 rounded-xl bg-[#008751] text-white font-semibold">Start Chat</button>
-              </form>
+              <div className="space-y-3">
+                <input
+                  type="tel"
+                  placeholder="+234 801 234 5678"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] text-base"
+                  value={newChatNumber}
+                  onChange={e=>setNewChatNumber(e.target.value)}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={async()=>{
+                    if(newChatNumber.length < 6) return;
+                    const userData = await searchUserByPhone(newChatNumber);
+                    if(!userData) return;
+                    const newChat: Chat = {
+                      id: userData.id,
+                      name: userData.username || `User ${newChatNumber}`,
+                      avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
+                      lastMessage: '',
+                      time: 'Now',
+                      unread: 0
+                    };
+                    setChats(prev => prev.find(c=>c.id===newChat.id) ? prev : [newChat,...prev]);
+                    setActiveChat(newChat);
+                    setShowNewChat(false);
+                    setNewChatNumber('');
+                  }}
+                  className="w-full py-3 rounded-xl bg-[#008751] text-white font-semibold text-base active:bg-[#006b40]"
+                >
+                  Start Chat
+                </button>
+              </div>
               <div className="mt-3">
                 <div className="flex items-center gap-3 my-3">
                   <div className="flex-1 h-px bg-gray-200"/>
                   <span className="text-xs text-gray-400">or</span>
                   <div className="flex-1 h-px bg-gray-200"/>
                 </div>
-                <button onClick={handlePickContacts} className="w-full py-3 rounded-xl border-2 border-[#008751] text-[#008751] font-semibold flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePickContacts}
+                  className="w-full py-3 rounded-xl border-2 border-[#008751] text-[#008751] font-semibold flex items-center justify-center gap-2 active:bg-green-50"
+                >
                   <Users className="w-5 h-5"/>
                   Find from Contacts
                 </button>
