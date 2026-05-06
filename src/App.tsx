@@ -670,20 +670,22 @@ export default function App() {
 
   const initiateCall = async (type: 'voice' | 'video') => {
     if (!activeChat || !userId) return;
-    // Play outgoing ring using Web Audio API (no external URL needed)
+
+    // Show call screen IMMEDIATELY before anything else
+    setCalling({ type, active: true, incoming: false, remoteId: activeChat.id });
+
+    // Play ring
     try {
       const ctx = new AudioContext();
       const playRing = () => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+        osc.connect(gain); gain.connect(ctx.destination);
         osc.frequency.setValueAtTime(440, ctx.currentTime);
         osc.frequency.setValueAtTime(480, ctx.currentTime + 0.5);
         gain.gain.setValueAtTime(0.3, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 1);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1);
       };
       playRing();
       const ringInterval = setInterval(playRing, 3000);
@@ -691,26 +693,45 @@ export default function App() {
       (window as any)._ringCtx = ctx;
     } catch (e) {}
 
-    const rawStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
-    setLocalStream(rawStream);
-    const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
-    const createPeer = (targetId: string) => {
-      const peer = new Peer({ initiator: true, trickle: false, stream, config: iceConfig });
-      peer.on('signal', (sdp: any) => sendSignal(userId, targetId, 'call:incoming', { callType: type, sdp }));
-      peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(targetId, remote))));
-      peer.on('error', (err: any) => console.error('Peer error:', err));
-      peer.on('connect', () => {
-        // Stop outgoing ring when connected
-        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+    try {
+      // Get media stream
+      const rawStream = await navigator.mediaDevices.getUserMedia({
+        video: type === 'video',
+        audio: true
       });
-      peersRef.current.set(targetId, peer);
-    };
-    if (activeChat.isGroup) {
-      chatMembers.forEach(m => { if (m.id !== userId) createPeer(m.id); });
-      setCalling({ type, active: true, incoming: false, groupId: activeChat.id });
-    } else {
-      createPeer(activeChat.id);
-      setCalling({ type, active: true, incoming: false, remoteId: activeChat.id });
+      setLocalStream(rawStream);
+      const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
+
+      // Create peer connection
+      const peer = new Peer({ initiator: true, trickle: false, stream, config: iceConfig });
+
+      peer.on('signal', (sdp: any) => {
+        // Send signal to receiver
+        sendSignal(userId, activeChat.id, 'call:incoming', { callType: type, sdp });
+      });
+
+      peer.on('stream', (remote: MediaStream) => {
+        setRemoteStreams(prev => new Map(prev.set(activeChat.id, remote)));
+      });
+
+      peer.on('connect', () => {
+        if ((window as any)._ringInterval) {
+          clearInterval((window as any)._ringInterval);
+          (window as any)._ringInterval = null;
+        }
+      });
+
+      peer.on('error', (err: any) => {
+        console.error('Call peer error:', err);
+      });
+
+      peersRef.current.set(activeChat.id, peer);
+
+    } catch (err: any) {
+      console.error('Failed to start call:', err);
+      // Show error but keep call screen so user can end it
+      alert('Could not access microphone/camera. Please allow permissions and try again.');
+      cleanupCall();
     }
   };
 
