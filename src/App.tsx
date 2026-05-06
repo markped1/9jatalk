@@ -892,9 +892,16 @@ export default function App() {
             {(activeTab as string)==='chats' && (
               <div>
                 <div className="px-3 py-2 bg-white sticky top-0 z-10 border-b border-gray-100">
-                  <div className="bg-[#f0f2f5] rounded-full flex items-center px-4 py-2">
+                  <div className="bg-[#f0f2f5] rounded-full flex items-center px-4 py-2" onClick={()=>setShowNewChat(true)}>
                     <Search className="w-4 h-4 text-gray-400 flex-shrink-0"/>
-                    <input type="text" placeholder="Search or start new chat" className="bg-transparent outline-none w-full ml-2 text-sm" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
+                    <input
+                      type="text"
+                      placeholder="Search or start new chat"
+                      className="bg-transparent outline-none w-full ml-2 text-sm cursor-pointer"
+                      value={searchQuery}
+                      onChange={e=>{e.stopPropagation();setSearchQuery(e.target.value);}}
+                      onClick={e=>e.stopPropagation()}
+                    />
                   </div>
                 </div>
                 {chats.filter(c=>c.name.toLowerCase().includes(searchQuery.toLowerCase())||c.id.includes(searchQuery)).map(chat=>(
@@ -965,29 +972,30 @@ export default function App() {
         {showNewChat&&(
           <motion.div key="nc" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center px-4" onClick={()=>setShowNewChat(false)}>
             <motion.div initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}} className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e=>e.stopPropagation()}>
-              <h2 className="text-lg font-bold mb-4">New Chat</h2>
-              <div className="space-y-3">
-                <input
-                  type="tel"
-                  placeholder="+234 801 234 5678"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] text-base"
-                  value={newChatNumber}
-                  onChange={e=>setNewChatNumber(e.target.value)}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={async()=>{
-                    const num = newChatNumber.trim();
-                    if(num.length < 5) return;
+              <h2 className="text-lg font-bold mb-1">New Chat</h2>
+              <p className="text-xs text-gray-400 mb-4">Enter the phone number they used to register on 9jaTalk</p>
+              <input
+                type="tel"
+                placeholder="+234 801 234 5678"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#008751] outline-none text-base mb-3"
+                value={newChatNumber}
+                onChange={e=>setNewChatNumber(e.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={async()=>{
+                  const num = newChatNumber.trim();
+                  if(!num) return;
+                  try {
                     const userData = await searchUserByPhone(num);
                     if(!userData || userData.virtual) {
-                      alert(`No 9jaTalk user found for ${num}.\n\nMake sure:\n1. They are registered on 9jaTalk\n2. You enter their exact registered number`);
+                      alert('User not found. Make sure they are registered on 9jaTalk and you entered their exact number.');
                       return;
                     }
                     const newChat: Chat = {
                       id: userData.id,
-                      name: userData.username || `User ${num}`,
+                      name: userData.username || userData.phoneNumber || `User ${num}`,
                       avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
                       lastMessage: '',
                       time: 'Now',
@@ -997,13 +1005,15 @@ export default function App() {
                     setActiveChat(newChat);
                     setShowNewChat(false);
                     setNewChatNumber('');
-                  }}
-                  className="w-full py-3 rounded-xl bg-[#008751] text-white font-semibold text-base"
-                >
-                  Start Chat
-                </button>
-                <button type="button" onClick={()=>setShowNewChat(false)} className="w-full py-2 text-gray-500 text-sm">Cancel</button>
-              </div>
+                  } catch(err) {
+                    alert('Error finding user. Please try again.');
+                  }
+                }}
+                className="w-full py-3 rounded-xl bg-[#008751] text-white font-bold text-base mb-2"
+              >
+                Start Chat
+              </button>
+              <button type="button" onClick={()=>setShowNewChat(false)} className="w-full py-2 text-gray-500 text-sm">Cancel</button>
             </motion.div>
           </motion.div>
         )}
