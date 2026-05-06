@@ -643,7 +643,7 @@ export default function App() {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      // Free TURN server - allows calls across different mobile networks
+      { urls: 'stun:openrelay.metered.ca:80' },
       {
         urls: 'turn:openrelay.metered.ca:80',
         username: 'openrelayproject',
@@ -655,11 +655,17 @@ export default function App() {
         credential: 'openrelayproject'
       },
       {
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
         urls: 'turn:openrelay.metered.ca:443?transport=tcp',
         username: 'openrelayproject',
         credential: 'openrelayproject'
       }
-    ]
+    ],
+    iceCandidatePoolSize: 10
   };
 
   const initiateCall = async (type: 'voice' | 'video') => {
@@ -854,122 +860,144 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9000] flex flex-col bg-[#005a32] text-white"
-            style={{touchAction:'none'}}
+            className="fixed inset-0 z-[9000] flex flex-col text-white"
+            style={{
+              background: 'radial-gradient(ellipse at top, #1a3a2a 0%, #0a1a10 60%, #000 100%)',
+              touchAction: 'none'
+            }}
           >
-            {/* Remote video background */}
+            {/* Remote video fullscreen background */}
             {calling.type === 'video' && remoteStreams.size > 0 && (
               <div className="absolute inset-0">
                 {Array.from(remoteStreams.entries()).map(([id, stream]) => (
-                  <video
-                    key={id}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                    ref={(el) => { if (el) el.srcObject = stream; }}
-                  />
+                  <video key={id} autoPlay playsInline className="w-full h-full object-cover opacity-90"
+                    ref={(el) => { if (el) el.srcObject = stream; }} />
                 ))}
+                <div className="absolute inset-0 bg-black/20" />
               </div>
             )}
 
-            {/* Caller info - top half */}
-            <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6">
-              <div className="relative mb-6">
-                <img
-                  src={activeChat?.avatar || ("https://i.pravatar.cc/150?u=" + (calling.remoteId || 'unknown'))}
-                  alt="caller"
-                  className="w-32 h-32 rounded-full object-cover border-4 border-white/30 shadow-2xl"
-                />
-                {calling.incoming && (
-                  <motion.div
-                    animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0, 0.6] }}
-                    transition={{ repeat: Infinity, duration: 1.5 }}
-                    className="absolute inset-0 rounded-full border-4 border-green-400"
-                  />
-                )}
+            {/* Top bar */}
+            <div className="relative z-10 flex items-center justify-between px-5 pt-12 pb-4">
+              <div className="text-center flex-1">
+                <h2 className="text-xl font-bold">{activeChat?.name || calling.remoteId}</h2>
+                <p className="text-green-300 text-sm mt-0.5 flex items-center justify-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse" />
+                  {calling.incoming ? ('Incoming ' + calling.type + ' call') : remoteStreams.size > 0 ? 'Connected' : 'Calling...'}
+                </p>
               </div>
-              <h2 className="text-3xl font-bold mb-2 text-center">
-                {activeChat?.name || calling.remoteId || 'Unknown'}
-              </h2>
-              <p className="text-green-300 text-base animate-pulse">
-                {calling.incoming
-                  ? ('Incoming ' + calling.type + ' call...')
-                  : remoteStreams.size > 0
-                  ? 'Connected'
-                  : 'Calling...'}
-              </p>
             </div>
 
-            {/* Local video PiP */}
-            {calling.type === 'video' && !calling.incoming && (
-              <div className="absolute top-12 right-4 z-20 w-28 h-40 rounded-xl overflow-hidden border-2 border-white/50 shadow-xl">
+            {/* Center avatar */}
+            <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
+              {calling.type === 'video' && !calling.incoming ? (
+                <div className="relative w-full h-full">
+                  <video ref={localVideoRef} autoPlay muted playsInline
+                    className="w-full h-full object-cover" />
+                  {isVideoOff && (
+                    <div className="absolute inset-0 bg-[#0a1a10] flex items-center justify-center">
+                      <div className="w-28 h-28 rounded-full bg-[#008751]/30 flex items-center justify-center text-5xl font-bold border-4 border-[#008751]/50">
+                        {(activeChat?.name || '?').charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-6">
+                  {/* Pulsing rings for incoming */}
+                  <div className="relative">
+                    {calling.incoming && (
+                      <>
+                        <motion.div animate={{ scale: [1, 1.6], opacity: [0.4, 0] }}
+                          transition={{ repeat: Infinity, duration: 1.5 }}
+                          className="absolute inset-0 rounded-full bg-[#008751]/30" />
+                        <motion.div animate={{ scale: [1, 1.3], opacity: [0.5, 0] }}
+                          transition={{ repeat: Infinity, duration: 1.5, delay: 0.3 }}
+                          className="absolute inset-0 rounded-full bg-[#008751]/40" />
+                      </>
+                    )}
+                    <div className="w-32 h-32 rounded-full bg-[#008751]/20 border-4 border-[#008751]/60 flex items-center justify-center text-5xl font-bold relative z-10 overflow-hidden">
+                      {activeChat?.avatar ? (
+                        <img src={activeChat.avatar} className="w-full h-full object-cover" alt="" />
+                      ) : (
+                        <span>{(activeChat?.name || '?').charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-white/50 text-sm">
+                    {calling.incoming ? 'wants to ' + calling.type + ' call you' : 'Waiting for answer...'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Local video PiP (video calls only, when connected) */}
+            {calling.type === 'video' && !calling.incoming && remoteStreams.size > 0 && (
+              <div className="absolute top-20 right-4 z-20 w-24 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
                 <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
               </div>
             )}
 
-            {/* Controls - bottom - ALWAYS VISIBLE */}
-            <div className="flex-shrink-0 pb-16 pt-8 flex flex-col items-center gap-4 relative z-[9001] bg-gradient-to-t from-black/60 to-transparent w-full px-8">
+            {/* Bottom controls pill */}
+            <div className="relative z-[9001] pb-12 px-6 flex flex-col items-center gap-4">
               {calling.incoming ? (
-                <div className="flex items-center justify-center gap-20 w-full">
-                  {/* Reject */}
+                /* Incoming call controls */
+                <div className="flex items-center justify-center gap-12 w-full">
                   <div className="flex flex-col items-center gap-2">
-                    <button
+                    <motion.button whileTap={{ scale: 0.9 }}
                       onPointerDown={(e) => { e.stopPropagation(); rejectCall(); }}
-                      className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
-                      style={{WebkitTapHighlightColor:'transparent'}}
-                    >
-                      <PhoneOff className="w-9 h-9 text-white" />
-                    </button>
-                    <span className="text-white text-xs font-medium">Decline</span>
+                      className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center shadow-2xl"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}>
+                      <PhoneOff className="w-7 h-7 text-white" />
+                    </motion.button>
+                    <span className="text-white/70 text-xs">Decline</span>
                   </div>
-                  {/* Answer */}
                   <div className="flex flex-col items-center gap-2">
-                    <button
+                    <motion.button whileTap={{ scale: 0.9 }}
                       onPointerDown={(e) => { e.stopPropagation(); answerCall(); }}
-                      className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
-                      style={{WebkitTapHighlightColor:'transparent'}}
-                    >
-                      <Phone className="w-9 h-9 text-white" />
-                    </button>
-                    <span className="text-white text-xs font-medium">Accept</span>
+                      className="w-16 h-16 rounded-full bg-[#008751] flex items-center justify-center shadow-2xl"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}>
+                      <Phone className="w-7 h-7 text-white" />
+                    </motion.button>
+                    <span className="text-white/70 text-xs">Accept</span>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center gap-8 w-full">
+                /* Active call controls - pill style */
+                <div className="bg-white/10 backdrop-blur-md rounded-3xl px-6 py-4 flex items-center gap-6 border border-white/10">
                   {/* Mute */}
-                  <div className="flex flex-col items-center gap-2">
-                    <button
+                  <div className="flex flex-col items-center gap-1.5">
+                    <motion.button whileTap={{ scale: 0.9 }}
                       onPointerDown={(e) => { e.stopPropagation(); toggleMute(); }}
-                      className={"w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform " + (isMuted ? "bg-red-500" : "bg-white/20")}
-                      style={{WebkitTapHighlightColor:'transparent'}}
-                    >
-                      {isMuted ? <VolumeX className="w-7 h-7 text-white" /> : <Volume2 className="w-7 h-7 text-white" />}
-                    </button>
-                    <span className="text-white text-xs">{isMuted ? 'Unmute' : 'Mute'}</span>
+                      className={"w-12 h-12 rounded-full flex items-center justify-center transition-colors " + (isMuted ? "bg-red-500" : "bg-white/20")}
+                      style={{ WebkitTapHighlightColor: 'transparent' }}>
+                      {isMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
+                    </motion.button>
+                    <span className="text-white/60 text-[10px]">{isMuted ? 'Unmute' : 'Mute'}</span>
                   </div>
-                  {/* Camera toggle (video only) */}
+
+                  {/* Camera (video only) */}
                   {calling.type === 'video' && (
-                    <div className="flex flex-col items-center gap-2">
-                      <button
+                    <div className="flex flex-col items-center gap-1.5">
+                      <motion.button whileTap={{ scale: 0.9 }}
                         onPointerDown={(e) => { e.stopPropagation(); toggleVideo(); }}
-                        className={"w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform " + (isVideoOff ? "bg-red-500" : "bg-white/20")}
-                        style={{WebkitTapHighlightColor:'transparent'}}
-                      >
-                        {isVideoOff ? <VideoIcon className="w-7 h-7 text-white" /> : <Video className="w-7 h-7 text-white" />}
-                      </button>
-                      <span className="text-white text-xs">{isVideoOff ? 'Camera On' : 'Camera Off'}</span>
+                        className={"w-12 h-12 rounded-full flex items-center justify-center transition-colors " + (isVideoOff ? "bg-red-500" : "bg-white/20")}
+                        style={{ WebkitTapHighlightColor: 'transparent' }}>
+                        {isVideoOff ? <VideoIcon className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}
+                      </motion.button>
+                      <span className="text-white/60 text-[10px]">{isVideoOff ? 'Cam On' : 'Cam Off'}</span>
                     </div>
                   )}
-                  {/* END CALL */}
-                  <div className="flex flex-col items-center gap-2">
-                    <button
+
+                  {/* End Call - red, larger */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <motion.button whileTap={{ scale: 0.9 }}
                       onPointerDown={(e) => { e.stopPropagation(); endCall(); }}
-                      className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
-                      style={{WebkitTapHighlightColor:'transparent'}}
-                    >
-                      <PhoneOff className="w-9 h-9 text-white" />
-                    </button>
-                    <span className="text-white text-xs font-medium">End Call</span>
+                      className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center shadow-xl"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}>
+                      <PhoneOff className="w-6 h-6 text-white" />
+                    </motion.button>
+                    <span className="text-white/60 text-[10px]">End</span>
                   </div>
                 </div>
               )}
