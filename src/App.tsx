@@ -459,22 +459,29 @@ export default function App() {
 
   const handleStartNewChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newChatNumber.length < 6) return;
-    const userData = await searchUserByPhone(newChatNumber);
-    if (!userData) return;
-    const newChat: Chat = {
-      id: userData.id,
-      name: userData.username || `User ${newChatNumber}`,
-      avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
-      lastMessage: '',
-      time: 'Now',
-      unread: 0
-    };
-    setChats(prev => prev.find(c => c.id === newChat.id) ? prev : [newChat, ...prev]);
-    setActiveChat(newChat);
-    setShowNewChat(false);
-    setNewChatNumber('');
-    setIsSidebarOpen(false);
+    const num = newChatNumber.trim();
+    if (!num) return;
+    try {
+      const userData = await searchUserByPhone(num);
+      if (!userData || userData.virtual) {
+        alert('User not found on 9jaTalk.\n\nMake sure:\n• They have registered at 9jatalk.vercel.app\n• You enter their exact number with country code (e.g. +917066373342)');
+        return;
+      }
+      const newChat: Chat = {
+        id: userData.id,
+        name: userData.username || userData.phoneNumber || `User ${num}`,
+        avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
+        lastMessage: '',
+        time: 'Now',
+        unread: 0
+      };
+      setChats(prev => prev.find(c => c.id === newChat.id) ? prev : [newChat, ...prev]);
+      setActiveChat(newChat);
+      setShowNewChat(false);
+      setNewChatNumber('');
+    } catch (err) {
+      alert('Error finding user. Please try again.');
+    }
   };
 
   // Pick contacts from device and find who's on 9jaTalk
@@ -633,8 +640,22 @@ export default function App() {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' }
+      // Free TURN server - allows calls across different mobile networks
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
     ]
   };
 
@@ -831,7 +852,7 @@ export default function App() {
                 ))}
               </div>
             )}
-            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
             {/* Top info */}
             <div className="relative z-10 flex flex-col items-center pt-16 w-full">
@@ -876,7 +897,7 @@ export default function App() {
             )}
 
             {/* Call controls */}
-            <div className="relative z-10 pb-16 w-full flex flex-col items-center gap-6">
+            <div className="relative z-30 pb-16 w-full flex flex-col items-center gap-6">
               {calling.incoming ? (
                 <div className="flex gap-16 items-center">
                   <button
