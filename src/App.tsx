@@ -8,6 +8,14 @@ import { motion, AnimatePresence } from 'motion/react';import {
 } from 'lucide-react';
 import Peer from 'simple-peer';
 import {
+  startCall as agoraStartCall,
+  endCall as agoraEndCall,
+  toggleMuteAudio as agoraToggleMuteAudio,
+  toggleMuteVideo as agoraToggleMuteVideo,
+  getCallChannel,
+  playLocalVideo
+} from './services/agora';
+import {
   sendOTP, verifyOTP, onAuthChange, getUserProfile, updateUserProfile,
   searchUserByPhone, setOnline,
   getChatId, sendMessage as fbSendMessage, listenMessages, listenUserChats,
@@ -16,14 +24,6 @@ import {
   listenUserGroups, sendSignal, listenSignals, uploadFile,
   getAiSuggestions, translateText, auth
 } from './services/firebase';
-import {
-  startCall as agoraStartCall,
-  endCall as agoraEndCall,
-  toggleMuteAudio,
-  toggleMuteVideo,
-  getCallChannel,
-  playLocalVideo
-} from './services/agora';
 import type { ConfirmationResult } from 'firebase/auth';
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -65,6 +65,45 @@ export default function App() {
     const t = setTimeout(() => setShowSplash(false), 2500);
     return () => clearTimeout(t);
   }, []);
+
+  // ─── Android Runtime Permissions ──────────────────────────────────────────────
+
+  const requestMediaPermissions = async (needsVideo: boolean = false): Promise<boolean> => {
+    try {
+      // Check if we're on native platform (Android/iOS via Capacitor)
+      const isNative = (window as any).Capacitor || (window as any).capacitor;
+      
+      if (isNative) {
+        // Try using Permissions API if available (Capacitor 5+)
+        try {
+          const Capacitor = (window as any).Capacitor;
+          if (Capacitor?.Plugins?.Permissions) {
+            const permissions = ['android.permission.RECORD_AUDIO'];
+            if (needsVideo) permissions.push('android.permission.CAMERA');
+            
+            const status = await Capacitor.Plugins.Permissions.requestPermissions({
+              permissions
+            });
+            
+            return status?.permissions ? true : false;
+          }
+        } catch (e) {
+          console.warn('Permissions plugin not available, using browser prompt');
+        }
+        
+        // For older Capacitor versions, just return true and let native handle it
+        // The browser will prompt for permissions when getUserMedia is called
+        return true;
+      }
+      
+      // On web, permissions will be handled by browser
+      return true;
+    } catch (err) {
+      console.error('Permission request error:', err);
+      // Return true to allow the call to continue (browser will show native prompt)
+      return true;
+    }
+  };
 
   const [userId, setUserId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -110,7 +149,9 @@ export default function App() {
   const [calling, setCalling] = useState<{
     type: 'voice' | 'video'; active: boolean; incoming?: boolean;
     remoteId?: string; groupId?: string; signal?: any;
+    transport?: 'webrtc' | 'agora';
   } | null>(null);
+  const [callTransport, setCallTransport] = useState<'webrtc' | 'agora' | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [showEffectsBar, setShowEffectsBar] = useState(false);
@@ -347,12 +388,20 @@ export default function App() {
           const ringInterval = setInterval(playRing, 2000);
           (window as any)._ringInterval = ringInterval;
         } catch (e) {}
+
+        const transport = signal.payload.transport || 'webrtc';
         setCalling({
           active: true, incoming: true,
           type: signal.payload.callType,
           remoteId: signal.fromId,
-          signal: signal.payload.channel
+          signal: transport === 'webrtc' ? signal.payload.sdp : signal.payload.channel,
+          transport
         });
+      } else if (signal.type === 'call:answer') {
+        // Receiver answered, now establish WebRTC connection
+        if (calling && !calling.incoming && signal.payload.transport === 'webrtc') {
+          createWebRTCCall(calling.type, signal.fromId, false, signal.payload.sdp);
+        }
       } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
         if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
         cleanupCall();
@@ -360,22 +409,188 @@ export default function App() {
     });
   };
 
+  const stopLocalStream = () => {
+    localStream?.getTracks().forEach(t => t.stop());
+    processedStream?.getTracks().forEach(t => t.stop());
+  };
+
   const cleanupCall = async () => {
     if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
-    try { await agoraEndCall(); } catch (e) {}
+    if ((window as any)._callTimeout) { clearTimeout((window as any)._callTimeout); (window as any)._callTimeout = null; }
+    if (callTransport === 'agora') {
+      try { await agoraEndCall(); } catch (e) {}
+    }
+    stopLocalStream();
+    if (processingLoopRef.current) cancelAnimationFrame(processingLoopRef.current);
+    if (processingVideoRef.current) { processingVideoRef.current.pause(); processingVideoRef.current.srcObject = null; }
+    peersRef.current.forEach(p => {
+      try { p.destroy(); } catch (e) {}
+    });
+    peersRef.current.clear();
+    setLocalStream(null);
+    setProcessedStream(null);
     setCalling(null);
+    setCallTransport(null);
     setIsMuted(false);
     setIsVideoOff(false);
     setRemoteVideoUsers(new Map());
+    setRemoteStreams(new Map());
+  };
+
+  const joinAgoraChannel = async (channel: string, type: 'voice' | 'video') => {
+    if (!userId) return;
+    setCallTransport('agora');
+    try {
+      await agoraStartCall(channel, userId, type, {
+        onUserJoined: (uid, audioTrack, videoTrack) => {
+          if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+          if (videoTrack) {
+            setRemoteVideoUsers(prev => new Map(prev.set(String(uid), videoTrack)));
+          }
+        },
+        onUserLeft: (uid) => {
+          setRemoteVideoUsers(prev => { const m = new Map(prev); m.delete(String(uid)); return m; });
+        },
+        onError: (err) => {
+          console.error('Agora error:', err);
+          cleanupCall();
+        }
+      });
+      if (type === 'video' && localVideoContainerRef.current) {
+        playLocalVideo(localVideoContainerRef.current);
+      }
+    } catch (err) {
+      console.error('Failed to join Agora channel:', err);
+      cleanupCall();
+    }
+  };
+
+  const startAgoraFallback = async (type: 'voice' | 'video', targetId: string) => {
+    if (!userId) return;
+    setCalling(prev => prev ? { ...prev, transport: 'agora' } : null);
+    setCallTransport('agora');
+    const channel = getCallChannel(userId, targetId);
+    await sendSignal(userId, targetId, 'call:incoming', {
+      callType: type,
+      transport: 'agora',
+      channel
+    });
+    await joinAgoraChannel(channel, type);
+  };
+
+  const createWebRTCCall = async (type: 'voice' | 'video', targetId: string, initiator: boolean, remoteSignal?: any) => {
+    if (!userId) return;
+    
+    try {
+      let rawStream = localStream;
+      if (!rawStream) {
+        // Request media permissions if not already done
+        const hasPermission = await requestMediaPermissions(type === 'video');
+        if (!hasPermission) {
+          alert('Camera and microphone permissions are required for calls.');
+          cleanupCall();
+          return;
+        }
+        
+        rawStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+        setLocalStream(rawStream);
+      }
+      
+      const stream = rawStream;
+      let connected = false;
+      
+      const peer = new Peer({ initiator, trickle: false, stream });
+      
+      peer.on('signal', (sdp: any) => {
+        const signalType = initiator ? 'call:incoming' : 'call:answer';
+        console.log('WebRTC signal sent:', signalType, 'from', userId, 'to', targetId);
+        sendSignal(userId, targetId, signalType, {
+          callType: type,
+          transport: 'webrtc',
+          sdp
+        });
+      });
+      
+      peer.on('connect', () => {
+        console.log('WebRTC peer connected');
+        connected = true;
+        if ((window as any)._callTimeout) {
+          clearTimeout((window as any)._callTimeout);
+          (window as any)._callTimeout = null;
+        }
+        // Stop caller's ring when connected
+        if ((window as any)._ringInterval) {
+          clearInterval((window as any)._ringInterval);
+          (window as any)._ringInterval = null;
+        }
+      });
+      
+      peer.on('stream', (remote: MediaStream) => {
+        console.log('Remote stream received');
+        setRemoteStreams(prev => new Map(prev.set(targetId, remote)));
+      });
+      
+      peer.on('close', () => {
+        console.log('WebRTC peer closed');
+        peersRef.current.delete(targetId);
+        if (peersRef.current.size === 0) {
+          cleanupCall();
+        }
+      });
+      
+      peer.on('error', (err: any) => {
+        console.error('WebRTC peer error:', err, 'connected:', connected);
+        peersRef.current.delete(targetId);
+        if (!connected && callTransport === 'webrtc') {
+          console.log('Falling back to Agora after WebRTC error');
+          startAgoraFallback(type, targetId);
+        }
+      });
+      
+      if (remoteSignal) {
+        console.log('Signaling peer with remote SDP');
+        peer.signal(remoteSignal);
+      }
+      
+      peersRef.current.set(targetId, peer);
+      
+      // Set timeout for connection establishment (30 seconds)
+      if (!(window as any)._callTimeout) {
+        (window as any)._callTimeout = setTimeout(() => {
+          if (!connected) {
+            console.warn('WebRTC connection timeout, falling back to Agora');
+            startAgoraFallback(type, targetId);
+          }
+        }, 30000);
+      }
+    } catch (err) {
+      console.error('Failed to create WebRTC call:', err);
+      cleanupCall();
+    }
   };
 
   const initiateCall = async (type: 'voice' | 'video') => {
     if (!activeChat || !userId) return;
+    if (activeChat.isGroup) {
+      setCalling({ type, active: true, incoming: false, groupId: activeChat.id, transport: 'agora' });
+      setCallTransport('agora');
+      await startAgoraFallback(type, activeChat.id);
+      return;
+    }
 
-    // Show call screen immediately
-    setCalling({ type, active: true, incoming: false, remoteId: activeChat.id });
+    // Request media permissions and get stream for caller
+    const hasPermission = await requestMediaPermissions(type === 'video');
+    if (!hasPermission) {
+      alert('Camera and microphone permissions are required for calls.');
+      return;
+    }
+    
+    const rawStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+    setLocalStream(rawStream);
 
-    // Play outgoing ring
+    setCalling({ type, active: true, incoming: false, remoteId: activeChat.id, transport: 'webrtc' });
+    setCallTransport('webrtc');
+
     try {
       const ctx = new AudioContext();
       const playRing = () => {
@@ -393,73 +608,28 @@ export default function App() {
       (window as any)._ringInterval = ringInterval;
     } catch (e) {}
 
-    const channel = getCallChannel(userId, activeChat.id);
-
-    // Notify receiver via Firebase signal
+    // Send call invitation without SDP
     await sendSignal(userId, activeChat.id, 'call:incoming', {
       callType: type,
-      channel
+      transport: 'webrtc'
     });
-
-    // Join Agora channel
-    try {
-      await agoraStartCall(channel, userId, type, {
-        onUserJoined: (uid, audioTrack, videoTrack) => {
-          if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
-          if (videoTrack) {
-            setRemoteVideoUsers(prev => new Map(prev.set(String(uid), videoTrack)));
-          }
-        },
-        onUserLeft: (uid) => {
-          setRemoteVideoUsers(prev => { const m = new Map(prev); m.delete(String(uid)); return m; });
-        },
-        onError: (err) => {
-          console.error('Agora error:', err);
-          cleanupCall();
-        }
-      });
-
-      // Play local video
-      if (type === 'video' && localVideoContainerRef.current) {
-        playLocalVideo(localVideoContainerRef.current);
-      }
-    } catch (err) {
-      console.error('Failed to join Agora channel:', err);
-      cleanupCall();
-    }
   };
 
   const answerCall = async () => {
     if (!calling?.remoteId || !userId) return;
     if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
 
-    const channel = calling.signal || getCallChannel(userId, calling.remoteId);
-
+    const transport = calling.transport || 'webrtc';
     setCalling(prev => prev ? { ...prev, incoming: false } : null);
 
-    try {
-      await agoraStartCall(channel, userId, calling.type, {
-        onUserJoined: (uid, audioTrack, videoTrack) => {
-          if (videoTrack) {
-            setRemoteVideoUsers(prev => new Map(prev.set(String(uid), videoTrack)));
-          }
-        },
-        onUserLeft: (uid) => {
-          setRemoteVideoUsers(prev => { const m = new Map(prev); m.delete(String(uid)); return m; });
-        },
-        onError: (err) => {
-          console.error('Agora answer error:', err);
-          cleanupCall();
-        }
-      });
-
-      if (calling.type === 'video' && localVideoContainerRef.current) {
-        playLocalVideo(localVideoContainerRef.current);
-      }
-    } catch (err) {
-      console.error('Failed to answer call:', err);
-      cleanupCall();
+    if (transport === 'agora') {
+      const channel = calling.signal || getCallChannel(userId, calling.remoteId);
+      await joinAgoraChannel(channel, calling.type);
+      return;
     }
+
+    // Create WebRTC call as initiator (receiver creates the offer)
+    await createWebRTCCall(calling.type, calling.remoteId, true);
   };
 
   const rejectCall = () => {
@@ -475,13 +645,23 @@ export default function App() {
   const toggleMute = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    toggleMuteAudio(newMuted);
+    if (callTransport === 'agora') {
+      agoraToggleMuteAudio(newMuted);
+    } else {
+      const audioTrack = localStream?.getAudioTracks()[0];
+      if (audioTrack) audioTrack.enabled = !newMuted;
+    }
   };
 
   const toggleVideo = () => {
     const newOff = !isVideoOff;
     setIsVideoOff(newOff);
-    toggleMuteVideo(newOff);
+    if (callTransport === 'agora') {
+      agoraToggleMuteVideo(newOff);
+    } else {
+      const videoTrack = localStream?.getVideoTracks()[0];
+      if (videoTrack) videoTrack.enabled = !newOff;
+    }
   };
 
   const handleSendOTP = async (e) => {
@@ -558,6 +738,13 @@ export default function App() {
 
   const startRecording = async () => {
     try {
+      // Request Android permissions
+      const hasPermission = await requestMediaPermissions(false);
+      if (!hasPermission) {
+        alert('Microphone permission is required for voice recording.');
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
@@ -719,6 +906,7 @@ export default function App() {
     setActiveChat(prev => prev ? { ...prev, disappearingTimer: seconds } : prev);
   };
 
+
   const formatTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -833,11 +1021,22 @@ export default function App() {
             }}
           >
             {/* Remote video fullscreen background */}
-            {calling.type === 'video' && remoteVideoUsers.size > 0 && (
+            {calling.type === 'video' && (remoteStreams.size > 0 || remoteVideoUsers.size > 0) && (
               <div className="absolute inset-0">
-                {Array.from(remoteVideoUsers.entries()).map(([uid, videoTrack]) => (
-                  <div key={uid} className="w-full h-full" ref={(el) => { if (el && videoTrack) videoTrack.play(el); }} />
-                ))}
+                {remoteStreams.size > 0 ? (
+                  Array.from(remoteStreams.entries()).map(([uid, stream]) => (
+                    <video key={uid}
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      playsInline
+                      ref={(el) => { if (el) el.srcObject = stream; }}
+                    />
+                  ))
+                ) : (
+                  Array.from(remoteVideoUsers.entries()).map(([uid, videoTrack]) => (
+                    <div key={uid} className="w-full h-full" ref={(el) => { if (el && videoTrack) videoTrack.play(el); }} />
+                  ))
+                )}
                 <div className="absolute inset-0 bg-black/20" />
               </div>
             )}
