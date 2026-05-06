@@ -49,17 +49,31 @@ export const db = getDatabase(app);
 // ─── Auth ──────────────────────────────────────────────────────────────────────
 
 // Step 1: Send OTP to phone number
+let recaptchaVerifierInstance: RecaptchaVerifier | null = null;
+
 export const sendOTP = async (
   phoneNumber: string,
   recaptchaContainerId: string
 ): Promise<ConfirmationResult> => {
-  // Set up invisible reCAPTCHA
-  const recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
+  // Clear any existing reCAPTCHA instance
+  if (recaptchaVerifierInstance) {
+    try { recaptchaVerifierInstance.clear(); } catch (e) {}
+    recaptchaVerifierInstance = null;
+  }
+
+  // Create fresh reCAPTCHA verifier
+  recaptchaVerifierInstance = new RecaptchaVerifier(auth, recaptchaContainerId, {
     size: 'invisible',
-    callback: () => {}
+    callback: () => {},
+    'expired-callback': () => {
+      if (recaptchaVerifierInstance) {
+        try { recaptchaVerifierInstance.clear(); } catch (e) {}
+        recaptchaVerifierInstance = null;
+      }
+    }
   });
 
-  const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+  const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifierInstance);
   return confirmationResult;
 };
 
@@ -71,7 +85,7 @@ export const verifyOTP = async (
   const result = await confirmationResult.confirm(otp);
   const user = result.user;
 
-  // Upsert user profile in Realtime DB
+  // Always upsert user profile — even if it exists, update lastSeen
   const userRef = ref(db, `users/${user.uid}`);
   const snap = await get(userRef);
   if (!snap.exists()) {
@@ -91,8 +105,10 @@ export const verifyOTP = async (
       messageTone: 'Default',
       createdAt: Date.now()
     });
+    console.log('New user created:', user.uid, user.phoneNumber);
   } else {
     await update(userRef, { lastSeen: Date.now() });
+    console.log('Existing user updated:', user.uid, user.phoneNumber);
   }
 
   // Seed support bot if not exists
