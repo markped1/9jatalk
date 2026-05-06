@@ -9,6 +9,7 @@ import android.webkit.WebSettings;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.Bridge;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -22,64 +23,61 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        WebView webView = getBridge().getWebView();
+        // Request permissions immediately on startup
+        requestMediaPermissions();
 
-        // Enable required WebView settings for WebRTC
-        WebSettings settings = webView.getSettings();
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
+        // Override WebChromeClient AFTER super.onCreate so we wrap Capacitor's client
+        getBridge().getWebView().post(() -> {
+            WebView webView = getBridge().getWebView();
 
-        // Handle WebRTC permission requests from the WebView
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                Log.d(TAG, "WebView permission request: " + java.util.Arrays.toString(request.getResources()));
-                pendingPermissionRequest = request;
+            // Get Capacitor's existing WebChromeClient to wrap it
+            final WebChromeClient existingClient = new WebChromeClient();
 
-                // Grant all requested resources immediately if Android permissions are granted
-                runOnUiThread(() -> {
-                    String[] androidPermissions = new String[]{
-                        Manifest.permission.CAMERA,
-                        Manifest.permission.RECORD_AUDIO,
-                        Manifest.permission.MODIFY_AUDIO_SETTINGS
-                    };
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    Log.d(TAG, "onPermissionRequest called for: " +
+                        java.util.Arrays.toString(request.getResources()));
 
-                    boolean allGranted = true;
-                    for (String permission : androidPermissions) {
-                        if (ContextCompat.checkSelfPermission(MainActivity.this, permission)
-                                != PackageManager.PERMISSION_GRANTED) {
-                            allGranted = false;
-                            break;
+                    runOnUiThread(() -> {
+                        // Always grant the request if Android permissions are granted
+                        if (hasMediaPermissions()) {
+                            Log.d(TAG, "Granting WebView permission request");
+                            request.grant(request.getResources());
+                        } else {
+                            pendingPermissionRequest = request;
+                            requestMediaPermissions();
                         }
-                    }
+                    });
+                }
 
-                    if (allGranted) {
-                        Log.d(TAG, "Granting WebView permissions");
-                        request.grant(request.getResources());
-                        pendingPermissionRequest = null;
-                    } else {
-                        Log.d(TAG, "Requesting Android permissions");
-                        ActivityCompat.requestPermissions(
-                            MainActivity.this,
-                            androidPermissions,
-                            PERMISSION_REQUEST_CODE
-                        );
-                    }
-                });
-            }
+                @Override
+                public boolean onShowFileChooser(WebView webView2,
+                    android.webkit.ValueCallback<android.net.Uri[]> filePathCallback,
+                    FileChooserParams fileChooserParams) {
+                    return existingClient.onShowFileChooser(webView2, filePathCallback, fileChooserParams);
+                }
+            });
         });
+    }
 
-        // Pre-request permissions on startup so they're ready when needed
-        String[] permissions = new String[]{
-            Manifest.permission.CAMERA,
+    private boolean hasMediaPermissions() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void requestMediaPermissions() {
+        String[] permissions = {
             Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
             Manifest.permission.MODIFY_AUDIO_SETTINGS
         };
 
         boolean needsRequest = false;
-        for (String permission : permissions) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+        for (String p : permissions) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
                 needsRequest = true;
                 break;
             }
