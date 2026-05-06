@@ -978,19 +978,16 @@ export default function App() {
                 <button
                   type="button"
                   onClick={async()=>{
-                    if(newChatNumber.length < 6) return;
-                    const userData = await searchUserByPhone(newChatNumber);
-                    if(!userData) {
-                      alert('User not found on 9jaTalk');
-                      return;
-                    }
-                    if(userData.virtual) {
-                      alert(`${newChatNumber} is not on 9jaTalk yet. Ask them to sign up at 9jatalk.vercel.app`);
+                    const num = newChatNumber.trim();
+                    if(num.length < 5) return;
+                    const userData = await searchUserByPhone(num);
+                    if(!userData || userData.virtual) {
+                      alert(`No 9jaTalk user found for ${num}.\n\nMake sure:\n1. They are registered on 9jaTalk\n2. You enter their exact registered number`);
                       return;
                     }
                     const newChat: Chat = {
                       id: userData.id,
-                      name: userData.username || `User ${newChatNumber}`,
+                      name: userData.username || `User ${num}`,
                       avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
                       lastMessage: '',
                       time: 'Now',

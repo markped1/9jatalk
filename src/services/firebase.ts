@@ -128,14 +128,25 @@ export const updateUserProfile = async (uid: string, updates: Record<string, any
 };
 
 export const searchUserByPhone = async (phone: string) => {
-  // Scan users for matching phoneNumber
   const snap = await get(ref(db, 'users'));
   if (!snap.exists()) return null;
   const users = snap.val();
-  const found = Object.values(users as Record<string, any>).find(
-    (u: any) => u.phoneNumber === phone
-  );
-  return found || { id: phone, phoneNumber: phone, username: `User ${phone}`, virtual: true };
+  const allUsers = Object.values(users as Record<string, any>);
+
+  // Try exact match first, then strip/add + prefix variations
+  const variants = [
+    phone,
+    phone.replace(/\s+/g, ''),
+    phone.startsWith('+') ? phone.slice(1) : '+' + phone,
+    phone.replace(/^\+/, ''),
+  ];
+
+  for (const variant of variants) {
+    const found = allUsers.find((u: any) => u.phoneNumber === variant);
+    if (found) return found;
+  }
+
+  return { id: phone, phoneNumber: phone, username: `User ${phone}`, virtual: true };
 };
 
 // ─── Presence ─────────────────────────────────────────────────────────────────
