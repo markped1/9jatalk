@@ -4,7 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.njatalk.app',
   appName: '9jaTalk',
   webDir: 'dist',
-  // No server.url - loads from local dist folder (true native app)
+  server: {
+    url: 'https://9jatalk.vercel.app',
+    cleartext: false,
+    androidScheme: 'https',
+  },
   android: {
     allowMixedContent: false,
     backgroundColor: '#008751',

@@ -784,7 +784,7 @@ export default function App() {
 
   if (!userId) {
     return (
-      <div className="min-h-screen wave-bg flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{backgroundImage:"url('/bg.png')",backgroundSize:'cover',backgroundPosition:'center'}}>
         {/* Wave decoration */}
         <div className="absolute bottom-0 left-0 right-0 h-32 overflow-hidden opacity-20">
           <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="w-[200%] h-full wave1">
@@ -1031,7 +1031,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* ── MAIN APP SHELL ────────────────────────────────────────────────── */}
-      <div className="fixed inset-0 flex flex-col bg-[#f0f2f5] overflow-hidden">
+      <div className="fixed inset-0 flex flex-col overflow-hidden" style={{backgroundImage:"url('/bg.png')",backgroundSize:'cover',backgroundPosition:'center',backgroundRepeat:'no-repeat'}}>
 
         {/* ── CHAT VIEW (full screen when activeChat is set) ─────────────── */}
         <AnimatePresence>

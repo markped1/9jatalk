@@ -73,6 +73,9 @@ export const sendOTP = async (
     }
   });
 
+  // Force token refresh
+  await recaptchaVerifierInstance.verify();
+
   const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifierInstance);
   return confirmationResult;
 };
