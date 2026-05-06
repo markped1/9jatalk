@@ -823,7 +823,14 @@ export default function App() {
           <div className="flex-1 overflow-y-auto bg-[#efeae2] px-3 py-2 space-y-1 pb-2">
             <div className="flex justify-center my-2"><span className="bg-[#fff9c4] text-[10px] text-gray-500 px-3 py-1 rounded-full shadow-sm">Messages are end-to-end encrypted</span></div>
             <AnimatePresence initial={false}>
-              {messages.filter(m=>activeChat.isGroup?(m.receiverId===activeChat.id||m.senderId===userId):(m.senderId===userId&&m.receiverId===activeChat.id)||(m.senderId===activeChat.id&&m.receiverId===userId)).map(msg=>(
+              {messages.filter(m=>
+                activeChat.isGroup
+                  ? (m.receiverId===activeChat.id || m.senderId===userId)
+                  : (m.senderId===userId && m.receiverId===activeChat.id) ||
+                    (m.senderId===activeChat.id && m.receiverId===userId) ||
+                    (m.senderId===userId && m.receiverId===userProfile?.phoneNumber) ||
+                    (m.senderId===activeChat.id)
+              ).map(msg=>(
                 <motion.div key={msg.id} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0}} className={`flex ${msg.senderId===userId?'justify-end':'justify-start'}`}>
                   <div className={`max-w-[78%] rounded-2xl shadow-sm px-3 py-2 ${msg.senderId===userId?'bg-[#dcf8c6] rounded-tr-sm':'bg-white rounded-tl-sm'}`}>
                     {msg.type==='image'?<img src={msg.content} className="rounded-xl max-w-full max-h-56 object-cover"/>:msg.type==='audio'?<div className="flex items-center gap-2 min-w-[160px]"><div className="w-8 h-8 rounded-full bg-[#008751] flex items-center justify-center text-white flex-shrink-0"><Mic className="w-4 h-4"/></div><audio src={msg.content} controls className="h-7 flex-1"/></div>:<p className="text-[14px] leading-relaxed">{msg.content}</p>}
@@ -973,7 +980,14 @@ export default function App() {
                   onClick={async()=>{
                     if(newChatNumber.length < 6) return;
                     const userData = await searchUserByPhone(newChatNumber);
-                    if(!userData) return;
+                    if(!userData) {
+                      alert('User not found on 9jaTalk');
+                      return;
+                    }
+                    if(userData.virtual) {
+                      alert(`${newChatNumber} is not on 9jaTalk yet. Ask them to sign up at 9jatalk.vercel.app`);
+                      return;
+                    }
                     const newChat: Chat = {
                       id: userData.id,
                       name: userData.username || `User ${newChatNumber}`,

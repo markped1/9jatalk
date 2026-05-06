@@ -272,6 +272,12 @@ export const listenUserChats = (
         };
       })
     );
+    // Sort by most recent message
+    chatList.sort((a, b) => {
+      const aTime = chatData[a.id]?.lastMessageTime || 0;
+      const bTime = chatData[b.id]?.lastMessageTime || 0;
+      return bTime - aTime;
+    });
     cb(chatList);
   });
   return () => off(chatMetaRef);
