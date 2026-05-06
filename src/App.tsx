@@ -694,10 +694,10 @@ export default function App() {
     } catch (e) {}
 
     try {
-      // Get media stream
+      // Get media stream - voice only doesn't need camera
       const rawStream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
-        audio: true
+        video: type === 'video' ? { facingMode: 'user' } : false,
+        audio: { echoCancellation: true, noiseSuppression: true }
       });
       setLocalStream(rawStream);
       const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
@@ -737,7 +737,10 @@ export default function App() {
 
   const answerCall = async () => {
     if (!calling?.remoteId || !userId) return;
-    const rawStream = await navigator.mediaDevices.getUserMedia({ video: calling.type === 'video', audio: true });
+    const rawStream = await navigator.mediaDevices.getUserMedia({
+      video: calling.type === 'video' ? { facingMode: 'user' } : false,
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
     setLocalStream(rawStream);
     const stream = calling.type === 'video' ? getEnhancedStream(rawStream) : rawStream;
     const peer = new Peer({ initiator: false, trickle: false, stream, config: iceConfig });
