@@ -349,9 +349,12 @@ export default function App() {
       } else if (signal.type === 'call:answer') {
         // Stop ring
         if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
+        // Signal the peer with the answer
         const peer = peersRef.current.get(signal.fromId);
-        if (peer) peer.signal(signal.payload.sdp);
-        setCalling(prev => prev ? { ...prev, incoming: false } : null);
+        if (peer) {
+          peer.signal(signal.payload.sdp);
+          setCalling(prev => prev ? { ...prev, incoming: false } : null);
+        }
       } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
         if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
         cleanupCall();
@@ -686,9 +689,14 @@ export default function App() {
     setLocalStream(rawStream);
     const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
     const createPeer = (targetId: string) => {
-      const peer = new Peer({ initiator: true, trickle: true, stream, config: iceConfig });
+      const peer = new Peer({ initiator: true, trickle: false, stream, config: iceConfig });
       peer.on('signal', (sdp: any) => sendSignal(userId, targetId, 'call:incoming', { callType: type, sdp }));
       peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(targetId, remote))));
+      peer.on('error', (err: any) => console.error('Peer error:', err));
+      peer.on('connect', () => {
+        // Stop outgoing ring when connected
+        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+      });
       peersRef.current.set(targetId, peer);
     };
     if (activeChat.isGroup) {
@@ -705,9 +713,13 @@ export default function App() {
     const rawStream = await navigator.mediaDevices.getUserMedia({ video: calling.type === 'video', audio: true });
     setLocalStream(rawStream);
     const stream = calling.type === 'video' ? getEnhancedStream(rawStream) : rawStream;
-    const peer = new Peer({ initiator: false, trickle: true, stream, config: iceConfig });
+    const peer = new Peer({ initiator: false, trickle: false, stream, config: iceConfig });
     peer.on('signal', (sdp: any) => sendSignal(userId, calling.remoteId!, 'call:answer', { sdp }));
     peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(calling.remoteId!, remote))));
+    peer.on('error', (err: any) => console.error('Answer peer error:', err));
+    peer.on('connect', () => {
+      if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+    });
     if (calling.signal) peer.signal(calling.signal);
     peersRef.current.set(calling.remoteId, peer);
     setCalling(prev => prev ? { ...prev, incoming: false } : null);
