@@ -9,9 +9,9 @@ import android.webkit.WebSettings;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.Bridge;
 import android.os.Bundle;
 import android.util.Log;
+import java.util.Arrays;
 
 public class MainActivity extends BridgeActivity {
 
@@ -23,89 +23,41 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Request permissions immediately on startup
-        requestMediaPermissions();
-
-        // Override WebChromeClient AFTER super.onCreate so we wrap Capacitor's client
-        getBridge().getWebView().post(() -> {
-            WebView webView = getBridge().getWebView();
-
-            // Get Capacitor's existing WebChromeClient to wrap it
-            final WebChromeClient existingClient = new WebChromeClient();
-
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    Log.d(TAG, "onPermissionRequest called for: " +
-                        java.util.Arrays.toString(request.getResources()));
-
-                    runOnUiThread(() -> {
-                        // Always grant the request if Android permissions are granted
-                        if (hasMediaPermissions()) {
-                            Log.d(TAG, "Granting WebView permission request");
-                            request.grant(request.getResources());
-                        } else {
-                            pendingPermissionRequest = request;
-                            requestMediaPermissions();
-                        }
-                    });
-                }
-
-                @Override
-                public boolean onShowFileChooser(WebView webView2,
-                    android.webkit.ValueCallback<android.net.Uri[]> filePathCallback,
-                    FileChooserParams fileChooserParams) {
-                    return existingClient.onShowFileChooser(webView2, filePathCallback, fileChooserParams);
-                }
-            });
-        });
-    }
-
-    private boolean hasMediaPermissions() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                == PackageManager.PERMISSION_GRANTED
-            && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private void requestMediaPermissions() {
+        // Request permissions immediately
         String[] permissions = {
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CAMERA,
             Manifest.permission.MODIFY_AUDIO_SETTINGS
         };
+        ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
 
-        boolean needsRequest = false;
-        for (String p : permissions) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                needsRequest = true;
-                break;
-            }
-        }
+        // Set WebChromeClient after a short delay to ensure Bridge is ready
+        getBridge().getWebView().postDelayed(() -> {
+            WebView webView = getBridge().getWebView();
+            WebSettings settings = webView.getSettings();
+            settings.setMediaPlaybackRequiresUserGesture(false);
 
-        if (needsRequest) {
-            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
-        }
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    Log.d(TAG, "Permission request: " + Arrays.toString(request.getResources()));
+                    runOnUiThread(() -> {
+                        // Grant ALL resources immediately - no questions asked
+                        request.grant(request.getResources());
+                        Log.d(TAG, "Granted all WebView permissions");
+                    });
+                }
+            });
+        }, 500);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            boolean allGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
-                }
-            }
-            Log.d(TAG, "Permission result: allGranted=" + allGranted);
+            Log.d(TAG, "Android permissions granted");
             if (pendingPermissionRequest != null) {
-                if (allGranted) {
-                    pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
-                } else {
-                    pendingPermissionRequest.deny();
-                }
+                pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
                 pendingPermissionRequest = null;
             }
         }
