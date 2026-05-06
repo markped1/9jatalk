@@ -16,6 +16,14 @@ import {
   listenUserGroups, sendSignal, listenSignals, uploadFile,
   getAiSuggestions, translateText, auth
 } from './services/firebase';
+import {
+  startCall as agoraStartCall,
+  endCall as agoraEndCall,
+  toggleMuteAudio,
+  toggleMuteVideo,
+  getCallChannel,
+  playLocalVideo
+} from './services/agora';
 import type { ConfirmationResult } from 'firebase/auth';
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -98,7 +106,7 @@ export default function App() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
-  // Calls
+  // Calls - using Agora SDK
   const [calling, setCalling] = useState<{
     type: 'voice' | 'video'; active: boolean; incoming?: boolean;
     remoteId?: string; groupId?: string; signal?: any;
@@ -120,6 +128,8 @@ export default function App() {
   const processingVideoRef = useRef<HTMLVideoElement | null>(null);
   const processingLoopRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [remoteVideoUsers, setRemoteVideoUsers] = useState<Map<string, any>>(new Map());
+  const localVideoContainerRef = useRef<HTMLDivElement>(null);
 
   // Unsubscribe refs
   const unsubMessages = useRef<(() => void) | null>(null);
@@ -319,47 +329,159 @@ export default function App() {
     unsubSignals.current?.();
     unsubSignals.current = listenSignals(uid, (signal) => {
       if (signal.type === 'call:incoming') {
-        // Play ring sound for incoming call using Web Audio API
+        // Play ring sound for incoming call
         try {
           const ctx = new AudioContext();
           const playRing = () => {
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
+            osc.connect(gain); gain.connect(ctx.destination);
             osc.type = 'sine';
             osc.frequency.setValueAtTime(880, ctx.currentTime);
             osc.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
             gain.gain.setValueAtTime(0.4, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-            osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + 0.8);
+            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.8);
           };
           playRing();
           const ringInterval = setInterval(playRing, 2000);
           (window as any)._ringInterval = ringInterval;
-          (window as any)._ringCtx = ctx;
         } catch (e) {}
         setCalling({
           active: true, incoming: true,
           type: signal.payload.callType,
           remoteId: signal.fromId,
-          signal: signal.payload.sdp
+          signal: signal.payload.channel
         });
-      } else if (signal.type === 'call:answer') {
-        // Stop ring
-        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
-        // Signal the peer with the answer
-        const peer = peersRef.current.get(signal.fromId);
-        if (peer) {
-          peer.signal(signal.payload.sdp);
-          setCalling(prev => prev ? { ...prev, incoming: false } : null);
-        }
       } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
-        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
+        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
         cleanupCall();
       }
     });
+  };
+
+  const cleanupCall = async () => {
+    if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+    try { await agoraEndCall(); } catch (e) {}
+    setCalling(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
+    setRemoteVideoUsers(new Map());
+  };
+
+  const initiateCall = async (type: 'voice' | 'video') => {
+    if (!activeChat || !userId) return;
+
+    // Show call screen immediately
+    setCalling({ type, active: true, incoming: false, remoteId: activeChat.id });
+
+    // Play outgoing ring
+    try {
+      const ctx = new AudioContext();
+      const playRing = () => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.setValueAtTime(480, ctx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1);
+      };
+      playRing();
+      const ringInterval = setInterval(playRing, 3000);
+      (window as any)._ringInterval = ringInterval;
+    } catch (e) {}
+
+    const channel = getCallChannel(userId, activeChat.id);
+
+    // Notify receiver via Firebase signal
+    await sendSignal(userId, activeChat.id, 'call:incoming', {
+      callType: type,
+      channel
+    });
+
+    // Join Agora channel
+    try {
+      await agoraStartCall(channel, userId, type, {
+        onUserJoined: (uid, audioTrack, videoTrack) => {
+          if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+          if (videoTrack) {
+            setRemoteVideoUsers(prev => new Map(prev.set(String(uid), videoTrack)));
+          }
+        },
+        onUserLeft: (uid) => {
+          setRemoteVideoUsers(prev => { const m = new Map(prev); m.delete(String(uid)); return m; });
+        },
+        onError: (err) => {
+          console.error('Agora error:', err);
+          cleanupCall();
+        }
+      });
+
+      // Play local video
+      if (type === 'video' && localVideoContainerRef.current) {
+        playLocalVideo(localVideoContainerRef.current);
+      }
+    } catch (err) {
+      console.error('Failed to join Agora channel:', err);
+      cleanupCall();
+    }
+  };
+
+  const answerCall = async () => {
+    if (!calling?.remoteId || !userId) return;
+    if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
+
+    const channel = calling.signal || getCallChannel(userId, calling.remoteId);
+
+    setCalling(prev => prev ? { ...prev, incoming: false } : null);
+
+    try {
+      await agoraStartCall(channel, userId, calling.type, {
+        onUserJoined: (uid, audioTrack, videoTrack) => {
+          if (videoTrack) {
+            setRemoteVideoUsers(prev => new Map(prev.set(String(uid), videoTrack)));
+          }
+        },
+        onUserLeft: (uid) => {
+          setRemoteVideoUsers(prev => { const m = new Map(prev); m.delete(String(uid)); return m; });
+        },
+        onError: (err) => {
+          console.error('Agora answer error:', err);
+          cleanupCall();
+        }
+      });
+
+      if (calling.type === 'video' && localVideoContainerRef.current) {
+        playLocalVideo(localVideoContainerRef.current);
+      }
+    } catch (err) {
+      console.error('Failed to answer call:', err);
+      cleanupCall();
+    }
+  };
+
+  const rejectCall = () => {
+    if (calling?.remoteId && userId) sendSignal(userId, calling.remoteId, 'call:reject', {});
+    cleanupCall();
+  };
+
+  const endCall = () => {
+    if (calling?.remoteId && userId) sendSignal(userId, calling.remoteId, 'call:end', {});
+    cleanupCall();
+  };
+
+  const toggleMute = () => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    toggleMuteAudio(newMuted);
+  };
+
+  const toggleVideo = () => {
+    const newOff = !isVideoOff;
+    setIsVideoOff(newOff);
+    toggleMuteVideo(newOff);
   };
 
   const handleSendOTP = async (e) => {
@@ -597,186 +719,6 @@ export default function App() {
     setActiveChat(prev => prev ? { ...prev, disappearingTimer: seconds } : prev);
   };
 
-  // â”€â”€â”€ WebRTC calls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const getEnhancedStream = (rawStream: MediaStream) => {
-    if (rawStream.getVideoTracks().length === 0) return rawStream;
-    const canvas = document.createElement('canvas');
-    const settings = rawStream.getVideoTracks()[0].getSettings();
-    canvas.width = settings.width || 640;
-    canvas.height = settings.height || 480;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return rawStream;
-    const v = document.createElement('video');
-    v.srcObject = rawStream; v.muted = true; v.play().catch(console.error);
-    processingVideoRef.current = v;
-    const process = () => {
-      const f = videoEffectsRef.current;
-      ctx.filter = `brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%) sepia(${f.sepia}%) blur(${f.blur}px) hue-rotate(${f.hueRotate}deg)`;
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-      processingLoopRef.current = requestAnimationFrame(process);
-    };
-    process();
-    const canvasStream = canvas.captureStream(30);
-    const result = new MediaStream([canvasStream.getVideoTracks()[0], rawStream.getAudioTracks()[0]]);
-    setProcessedStream(result);
-    return result;
-  };
-
-  const cleanupCall = () => {
-    // Stop ring
-    if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
-    if ((window as any)._ringCtx) { (window as any)._ringCtx.close().catch(() => {}); (window as any)._ringCtx = null; }
-    if ((window as any)._ringAudio) { (window as any)._ringAudio.pause(); (window as any)._ringAudio = null; }
-    localStream?.getTracks().forEach(t => t.stop());
-    processedStream?.getTracks().forEach(t => t.stop());
-    if (processingLoopRef.current) cancelAnimationFrame(processingLoopRef.current);
-    if (processingVideoRef.current) { processingVideoRef.current.pause(); processingVideoRef.current.srcObject = null; }
-    peersRef.current.forEach(p => p.destroy());
-    peersRef.current.clear();
-    setLocalStream(null); setProcessedStream(null);
-    setRemoteStreams(new Map()); setCalling(null);
-    setIsMuted(false); setIsVideoOff(false);
-  };
-
-  const iceConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:openrelay.metered.ca:80' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turns:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    ],
-    iceCandidatePoolSize: 10
-  };
-
-  const initiateCall = async (type: 'voice' | 'video') => {
-    if (!activeChat || !userId) return;
-
-    // Show call screen IMMEDIATELY before anything else
-    setCalling({ type, active: true, incoming: false, remoteId: activeChat.id });
-
-    // Play ring
-    try {
-      const ctx = new AudioContext();
-      const playRing = () => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(440, ctx.currentTime);
-        osc.frequency.setValueAtTime(480, ctx.currentTime + 0.5);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1);
-      };
-      playRing();
-      const ringInterval = setInterval(playRing, 3000);
-      (window as any)._ringInterval = ringInterval;
-      (window as any)._ringCtx = ctx;
-    } catch (e) {}
-
-    try {
-      // Get media stream - voice only doesn't need camera
-      const rawStream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video' ? { facingMode: 'user' } : false,
-        audio: { echoCancellation: true, noiseSuppression: true }
-      });
-      setLocalStream(rawStream);
-      const stream = type === 'video' ? getEnhancedStream(rawStream) : rawStream;
-
-      // Create peer connection
-      const peer = new Peer({ initiator: true, trickle: false, stream, config: iceConfig });
-
-      peer.on('signal', (sdp: any) => {
-        // Send signal to receiver
-        sendSignal(userId, activeChat.id, 'call:incoming', { callType: type, sdp });
-      });
-
-      peer.on('stream', (remote: MediaStream) => {
-        setRemoteStreams(prev => new Map(prev.set(activeChat.id, remote)));
-      });
-
-      peer.on('connect', () => {
-        if ((window as any)._ringInterval) {
-          clearInterval((window as any)._ringInterval);
-          (window as any)._ringInterval = null;
-        }
-      });
-
-      peer.on('error', (err: any) => {
-        console.error('Call peer error:', err);
-      });
-
-      peersRef.current.set(activeChat.id, peer);
-
-    } catch (err: any) {
-      console.error('Failed to start call:', err);
-      // Show error but keep call screen so user can end it
-      alert('Could not access microphone/camera. Please allow permissions and try again.');
-      cleanupCall();
-    }
-  };
-
-  const answerCall = async () => {
-    if (!calling?.remoteId || !userId) return;
-    const rawStream = await navigator.mediaDevices.getUserMedia({
-      video: calling.type === 'video' ? { facingMode: 'user' } : false,
-      audio: { echoCancellation: true, noiseSuppression: true }
-    });
-    setLocalStream(rawStream);
-    const stream = calling.type === 'video' ? getEnhancedStream(rawStream) : rawStream;
-    const peer = new Peer({ initiator: false, trickle: false, stream, config: iceConfig });
-    peer.on('signal', (sdp: any) => sendSignal(userId, calling.remoteId!, 'call:answer', { sdp }));
-    peer.on('stream', (remote: MediaStream) => setRemoteStreams(prev => new Map(prev.set(calling.remoteId!, remote))));
-    peer.on('error', (err: any) => console.error('Answer peer error:', err));
-    peer.on('connect', () => {
-      if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
-    });
-    if (calling.signal) peer.signal(calling.signal);
-    peersRef.current.set(calling.remoteId, peer);
-    setCalling(prev => prev ? { ...prev, incoming: false } : null);
-  };
-
-  const rejectCall = () => {
-    if (calling?.remoteId && userId) sendSignal(userId, calling.remoteId, 'call:reject', {});
-    cleanupCall();
-  };
-
-  const endCall = () => {
-    if (calling?.remoteId && userId) sendSignal(userId, calling.remoteId, 'call:end', {});
-    cleanupCall();
-  };
-
-  const toggleMute = () => {
-    const track = localStream?.getAudioTracks()[0];
-    if (track) { track.enabled = !track.enabled; setIsMuted(!track.enabled); }
-  };
-
-  const toggleVideo = () => {
-    const track = localStream?.getVideoTracks()[0];
-    if (track) { track.enabled = !track.enabled; setIsVideoOff(!track.enabled); }
-  };
-
-  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   const formatTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -891,11 +833,10 @@ export default function App() {
             }}
           >
             {/* Remote video fullscreen background */}
-            {calling.type === 'video' && remoteStreams.size > 0 && (
+            {calling.type === 'video' && remoteVideoUsers.size > 0 && (
               <div className="absolute inset-0">
-                {Array.from(remoteStreams.entries()).map(([id, stream]) => (
-                  <video key={id} autoPlay playsInline className="w-full h-full object-cover opacity-90"
-                    ref={(el) => { if (el) el.srcObject = stream; }} />
+                {Array.from(remoteVideoUsers.entries()).map(([uid, videoTrack]) => (
+                  <div key={uid} className="w-full h-full" ref={(el) => { if (el && videoTrack) videoTrack.play(el); }} />
                 ))}
                 <div className="absolute inset-0 bg-black/20" />
               </div>
@@ -955,11 +896,10 @@ export default function App() {
               )}
             </div>
 
-            {/* Local video PiP (video calls only, when connected) */}
-            {calling.type === 'video' && !calling.incoming && remoteStreams.size > 0 && (
-              <div className="absolute top-20 right-4 z-20 w-24 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl">
-                <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-              </div>
+            {/* Local video PiP */}
+            {calling.type === 'video' && !calling.incoming && remoteVideoUsers.size > 0 && (
+              <div className="absolute top-20 right-4 z-20 w-24 h-36 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl"
+                ref={localVideoContainerRef} />
             )}
 
             {/* Bottom controls pill */}
