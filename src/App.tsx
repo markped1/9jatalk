@@ -742,7 +742,13 @@ export default function App() {
 
   if (!userId) {
     return (
-      <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center p-4">
+      <div className="min-h-screen wave-bg flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Wave decoration */}
+        <div className="absolute bottom-0 left-0 right-0 h-32 overflow-hidden opacity-20">
+          <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="w-[200%] h-full wave1">
+            <path d="M0,60 C150,100 350,0 600,60 C850,120 1050,20 1200,60 L1200,120 L0,120 Z" fill="white"/>
+          </svg>
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center"
@@ -836,7 +842,8 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex flex-col items-center justify-between bg-gray-900 text-white"
+            className="fixed inset-0 z-[9000] flex flex-col bg-[#005a32] text-white"
+            style={{touchAction:'none'}}
           >
             {/* Remote video background */}
             {calling.type === 'video' && remoteStreams.size > 0 && (
@@ -852,95 +859,113 @@ export default function App() {
                 ))}
               </div>
             )}
-            <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
-            {/* Top info */}
-            <div className="relative z-10 flex flex-col items-center pt-16 w-full">
-              <div className="relative mb-4">
+            {/* Caller info - top half */}
+            <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6">
+              <div className="relative mb-6">
                 <img
                   src={activeChat?.avatar || ("https://i.pravatar.cc/150?u=" + (calling.remoteId || 'unknown'))}
                   alt="caller"
-                  className="w-28 h-28 rounded-full object-cover border-4 border-white shadow-2xl"
+                  className="w-32 h-32 rounded-full object-cover border-4 border-white/30 shadow-2xl"
                 />
                 {calling.incoming && (
                   <motion.div
-                    animate={{ scale: [1, 1.4, 1] }}
+                    animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0, 0.6] }}
                     transition={{ repeat: Infinity, duration: 1.5 }}
-                    className="absolute inset-0 rounded-full border-4 border-green-400 opacity-60"
+                    className="absolute inset-0 rounded-full border-4 border-green-400"
                   />
                 )}
               </div>
-              <h2 className="text-2xl font-bold mb-1">
+              <h2 className="text-3xl font-bold mb-2 text-center">
                 {activeChat?.name || calling.remoteId || 'Unknown'}
               </h2>
-              <p className="text-green-300 text-sm">
-                {calling.incoming ? ('Incoming ' + calling.type + ' call...') : (calling.type === 'video' ? 'Video call' : 'Voice call')}
+              <p className="text-green-300 text-base animate-pulse">
+                {calling.incoming
+                  ? ('Incoming ' + calling.type + ' call...')
+                  : remoteStreams.size > 0
+                  ? 'Connected'
+                  : 'Calling...'}
               </p>
             </div>
 
-            {/* Local video pip */}
+            {/* Local video PiP */}
             {calling.type === 'video' && !calling.incoming && (
-              <div className="absolute top-4 right-4 z-20 w-28 h-40 rounded-xl overflow-hidden border-2 border-white shadow-lg">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className={"w-full h-full object-cover mirror" + (isVideoOff ? " opacity-0" : "")}
-                />
-                {isVideoOff && (
-                  <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                    <VideoIcon className="text-gray-400 w-8 h-8" />
-                  </div>
-                )}
+              <div className="absolute top-12 right-4 z-20 w-28 h-40 rounded-xl overflow-hidden border-2 border-white/50 shadow-xl">
+                <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
               </div>
             )}
 
-            {/* Call controls */}
-            <div className="relative z-30 pb-16 w-full flex flex-col items-center gap-6">
+            {/* Controls - bottom - ALWAYS VISIBLE */}
+            <div className="flex-shrink-0 pb-16 pt-8 flex flex-col items-center gap-4 relative z-[9001] bg-gradient-to-t from-black/60 to-transparent w-full px-8">
               {calling.incoming ? (
-                <div className="flex gap-16 items-center">
-                  <button
-                    onClick={rejectCall}
-                    className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center shadow-xl hover:bg-red-600 transition-colors"
-                  >
-                    <PhoneOff className="w-7 h-7 text-white" />
-                  </button>
-                  <button
-                    onClick={answerCall}
-                    className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center shadow-xl hover:bg-green-600 transition-colors"
-                  >
-                    <Phone className="w-7 h-7 text-white" />
-                  </button>
+                <div className="flex items-center justify-center gap-20 w-full">
+                  {/* Reject */}
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      onPointerDown={(e) => { e.stopPropagation(); rejectCall(); }}
+                      className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+                      style={{WebkitTapHighlightColor:'transparent'}}
+                    >
+                      <PhoneOff className="w-9 h-9 text-white" />
+                    </button>
+                    <span className="text-white text-xs font-medium">Decline</span>
+                  </div>
+                  {/* Answer */}
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      onPointerDown={(e) => { e.stopPropagation(); answerCall(); }}
+                      className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+                      style={{WebkitTapHighlightColor:'transparent'}}
+                    >
+                      <Phone className="w-9 h-9 text-white" />
+                    </button>
+                    <span className="text-white text-xs font-medium">Accept</span>
+                  </div>
                 </div>
               ) : (
-                <div className="flex gap-8 items-center">
-                  <button
-                    onClick={toggleMute}
-                    className={"w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-colors " + (isMuted ? "bg-red-500 hover:bg-red-600" : "bg-white/20 hover:bg-white/30")}
-                  >
-                    {isMuted ? <VolumeX className="w-6 h-6 text-white" /> : <Volume2 className="w-6 h-6 text-white" />}
-                  </button>
-                  {calling.type === 'video' && (
+                <div className="flex items-center justify-center gap-8 w-full">
+                  {/* Mute */}
+                  <div className="flex flex-col items-center gap-2">
                     <button
-                      onClick={toggleVideo}
-                      className={"w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-colors " + (isVideoOff ? "bg-red-500 hover:bg-red-600" : "bg-white/20 hover:bg-white/30")}
+                      onPointerDown={(e) => { e.stopPropagation(); toggleMute(); }}
+                      className={"w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform " + (isMuted ? "bg-red-500" : "bg-white/20")}
+                      style={{WebkitTapHighlightColor:'transparent'}}
                     >
-                      {isVideoOff ? <VideoIcon className="w-6 h-6 text-white" /> : <Video className="w-6 h-6 text-white" />}
+                      {isMuted ? <VolumeX className="w-7 h-7 text-white" /> : <Volume2 className="w-7 h-7 text-white" />}
                     </button>
+                    <span className="text-white text-xs">{isMuted ? 'Unmute' : 'Mute'}</span>
+                  </div>
+                  {/* Camera toggle (video only) */}
+                  {calling.type === 'video' && (
+                    <div className="flex flex-col items-center gap-2">
+                      <button
+                        onPointerDown={(e) => { e.stopPropagation(); toggleVideo(); }}
+                        className={"w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform " + (isVideoOff ? "bg-red-500" : "bg-white/20")}
+                        style={{WebkitTapHighlightColor:'transparent'}}
+                      >
+                        {isVideoOff ? <VideoIcon className="w-7 h-7 text-white" /> : <Video className="w-7 h-7 text-white" />}
+                      </button>
+                      <span className="text-white text-xs">{isVideoOff ? 'Camera On' : 'Camera Off'}</span>
+                    </div>
                   )}
-                  <button
-                    onClick={endCall}
-                    className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center shadow-xl hover:bg-red-600 transition-colors"
-                  >
-                    <PhoneOff className="w-7 h-7 text-white" />
-                  </button>
+                  {/* END CALL */}
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      onPointerDown={(e) => { e.stopPropagation(); endCall(); }}
+                      className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+                      style={{WebkitTapHighlightColor:'transparent'}}
+                    >
+                      <PhoneOff className="w-9 h-9 text-white" />
+                    </button>
+                    <span className="text-white text-xs font-medium">End Call</span>
+                  </div>
                 </div>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+                  />
 
       {/* ── MAIN APP SHELL ────────────────────────────────────────────────── */}
       <div className="fixed inset-0 flex flex-col bg-[#f0f2f5] overflow-hidden">
