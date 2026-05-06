@@ -52,6 +52,12 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState('chats');
 
+  // Dismiss splash after 2.5 seconds
+  useEffect(() => {
+    const t = setTimeout(() => setShowSplash(false), 2500);
+    return () => clearTimeout(t);
+  }, []);
+
   const [userId, setUserId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -756,6 +762,17 @@ export default function App() {
   }
 
   return (
+    <>
+      {showSplash && (
+        <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-[#008751]">
+          <motion.div initial={{scale:0.5,opacity:0}} animate={{scale:1,opacity:1}} transition={{duration:0.5}} className="flex flex-col items-center gap-4">
+            <img src="/logo.png" className="w-32 h-32 object-contain" style={{mixBlendMode:'screen'}} alt="9jaTalk"/>
+            <p className="text-white text-2xl font-bold tracking-wide">9jaTalk</p>
+            <p className="text-white/60 text-xs">Designed by Thompson Obosa</p>
+          </motion.div>
+          <div className="absolute bottom-10"><div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin"/></div>
+        </div>
+      )}
     <div className="flex flex-col h-[100dvh] bg-white overflow-hidden">
       {activeChat ? (
         <div className="flex flex-col h-full">
@@ -1017,5 +1034,6 @@ export default function App() {
         </button>
       )}
     </div>
+    </>
   );
 }
