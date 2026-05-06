@@ -956,9 +956,8 @@ export default function App() {
           </motion.div>
         )}
         {showNewChat&&(
-          <motion.div key="nc" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[100] bg-black/50 flex items-end" onClick={()=>setShowNewChat(false)}>
-            <motion.div initial={{y:300}} animate={{y:0}} exit={{y:300}} className="bg-white rounded-t-3xl p-6 w-full" onClick={e=>e.stopPropagation()}>
-              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4"/>
+          <motion.div key="nc" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center px-4" onClick={()=>setShowNewChat(false)}>
+            <motion.div initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}} className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e=>e.stopPropagation()}>
               <h2 className="text-lg font-bold mb-4">New Chat</h2>
               <div className="space-y-3">
                 <input
@@ -988,28 +987,12 @@ export default function App() {
                     setShowNewChat(false);
                     setNewChatNumber('');
                   }}
-                  className="w-full py-3 rounded-xl bg-[#008751] text-white font-semibold text-base active:bg-[#006b40]"
+                  className="w-full py-3 rounded-xl bg-[#008751] text-white font-semibold text-base"
                 >
                   Start Chat
                 </button>
+                <button type="button" onClick={()=>setShowNewChat(false)} className="w-full py-2 text-gray-500 text-sm">Cancel</button>
               </div>
-              <div className="mt-3">
-                <div className="flex items-center gap-3 my-3">
-                  <div className="flex-1 h-px bg-gray-200"/>
-                  <span className="text-xs text-gray-400">or</span>
-                  <div className="flex-1 h-px bg-gray-200"/>
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePickContacts}
-                  className="w-full py-3 rounded-xl border-2 border-[#008751] text-[#008751] font-semibold flex items-center justify-center gap-2 active:bg-green-50"
-                >
-                  <Users className="w-5 h-5"/>
-                  Find from Contacts
-                </button>
-                <p className="text-xs text-gray-400 text-center mt-2">Shows only contacts who are on 9jaTalk</p>
-              </div>
-              <div style={{height:'env(safe-area-inset-bottom)'}}/>
             </motion.div>
           </motion.div>
         )}
