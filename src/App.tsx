@@ -965,7 +965,6 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-                  />
 
       {/* ── MAIN APP SHELL ────────────────────────────────────────────────── */}
       <div className="fixed inset-0 flex flex-col bg-[#f0f2f5] overflow-hidden">
