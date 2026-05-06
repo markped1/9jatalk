@@ -448,11 +448,27 @@ export const listenSignals = (
   cb: (signal: any) => void
 ) => {
   const sigRef = ref(db, `signals/${userId}`);
+  // Use onValue to catch signals that arrived before listener started
+  onValue(sigRef, snap => {
+    if (!snap.exists()) return;
+    const signals = snap.val() as Record<string, any>;
+    // Process all pending signals
+    Object.entries(signals).forEach(([key, data]) => {
+      // Only process signals from last 30 seconds
+      if (Date.now() - data.timestamp < 30000) {
+        cb({ ...data, key });
+      }
+      // Clean up old signals
+      remove(ref(db, `signals/${userId}/${key}`));
+    });
+  });
+  // Also listen for new signals in real time
   const handler = onChildAdded(sigRef, snap => {
     if (!snap.exists()) return;
     const data = snap.val();
-    cb({ ...data, key: snap.key });
-    // Clean up after reading
+    if (Date.now() - data.timestamp < 30000) {
+      cb({ ...data, key: snap.key });
+    }
     remove(snap.ref);
   });
   return () => off(sigRef);
