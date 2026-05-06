@@ -5,14 +5,14 @@ const config: CapacitorConfig = {
   appName: '9jaTalk',
   webDir: 'dist',
   server: {
-    // For development: point to your local server
-    // Remove or comment this out for production builds
-    url: 'http://localhost:3000',
-    cleartext: true,
+    url: 'https://9jatalk.vercel.app',
+    cleartext: false,
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: false,
     backgroundColor: '#008751',
+    captureInput: true,
+    webContentsDebuggingEnabled: false,
   },
   ios: {
     contentInset: 'automatic',
@@ -20,12 +20,15 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      launchShowDuration: 2500,
       backgroundColor: '#008751',
       androidSplashResourceName: 'splash',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
     },
+    Microphone: {
+      permissions: ['microphone', 'camera']
+    }
   },
 };
 
