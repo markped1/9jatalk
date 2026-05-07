@@ -16,7 +16,7 @@ import {
   playLocalVideo
 } from './services/agora';
 import {
-  sendOTP, verifyOTP, onAuthChange, getUserProfile, updateUserProfile,
+  sendOTP, verifyOTP, signUpWithEmail, signInWithEmail, sendPasswordReset, onAuthChange, getUserProfile, updateUserProfile,
   searchUserByPhone, setOnline,
   getChatId, sendMessage as fbSendMessage, listenMessages, listenUserChats,
   markMessagesRead, reactToMessage, setTyping, listenTyping,
@@ -107,12 +107,18 @@ export default function App() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<'phone' | 'email'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [otpError, setOtpError] = useState('');
+  const [otpCooldown, setOtpCooldown] = useState(0);
 
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
@@ -136,6 +142,24 @@ export default function App() {
   const [newChatNumber, setNewChatNumber] = useState('');
   const [groupName, setGroupName] = useState('');
   const [chatMembers, setChatMembers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setInterval(() => setOtpCooldown((prev) => Math.max(prev - 1, 0)), 1000);
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
+
+  // Reset states when switching login methods
+  useEffect(() => {
+    setPhoneNumber('');
+    setEmail('');
+    setPassword('');
+    setDisplayName('');
+    setOtpSent(false);
+    setOtp('');
+    setOtpError('');
+    setConfirmationResult(null);
+  }, [loginMethod]);
   const [showMembers, setShowMembers] = useState(false);
 
   const [isPrivacyProtected, setIsPrivacyProtected] = useState(false);
@@ -375,7 +399,7 @@ export default function App() {
           // This is the receiver's answer - establish WebRTC connection
           createWebRTCCall(calling.type, signal.fromId, false, signal.payload.sdp);
         } else if (!calling || !calling.active) {
-          // This is a new call invitation
+          // This is a new call invitation from caller with SDP
           // Play ring sound for incoming call
           try {
             const ctx = new AudioContext();
@@ -394,6 +418,20 @@ export default function App() {
             const ringInterval = setInterval(playRing, 2000);
             (window as any)._ringInterval = ringInterval;
           } catch (e) {}
+
+          // For video calls, request camera permission early
+          if (signal.payload.callType === 'video') {
+            requestMediaPermissions(true).then(async (hasPermission) => {
+              if (hasPermission) {
+                try {
+                  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                  setLocalStream(stream);
+                } catch (e) {
+                  console.warn('Could not get camera for incoming video call');
+                }
+              }
+            }).catch(() => {});
+          }
 
           const transport = signal.payload.transport || 'webrtc';
           setCalling({
@@ -598,28 +636,8 @@ export default function App() {
     setCalling({ type, active: true, incoming: false, remoteId: activeChat.id, transport: 'webrtc' });
     setCallTransport('webrtc');
 
-    try {
-      const ctx = new AudioContext();
-      const playRing = () => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(440, ctx.currentTime);
-        osc.frequency.setValueAtTime(480, ctx.currentTime + 0.5);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1);
-      };
-      playRing();
-      const ringInterval = setInterval(playRing, 3000);
-      (window as any)._ringInterval = ringInterval;
-    } catch (e) {}
-
-    // Send call invitation without SDP
-    await sendSignal(userId, activeChat.id, 'call:incoming', {
-      callType: type,
-      transport: 'webrtc'
-    });
+    // Create WebRTC call as initiator (caller creates offer)
+    await createWebRTCCall(type, activeChat.id, true);
   };
 
   const answerCall = async () => {
@@ -643,8 +661,8 @@ export default function App() {
       return;
     }
 
-    // Create WebRTC call as initiator (receiver creates the offer) and send answer signal
-    await createWebRTCCall(calling.type, calling.remoteId, true);
+    // Create WebRTC call as receiver (initiator=false) and set remote signal
+    await createWebRTCCall(calling.type, calling.remoteId, false, calling.signal);
   };
 
   const rejectCall = () => {
@@ -680,18 +698,131 @@ export default function App() {
   };
 
   const handleSendOTP = async (e) => {
-    e.preventDefault(); if (phoneNumber.length < 8) return;
-    setLoginLoading(true); setOtpError('');
-    try { const result = await sendOTP(phoneNumber, 'recaptcha-container'); setConfirmationResult(result); setOtpSent(true); }
-    catch (err) { setOtpError(err.message || 'Failed to send OTP.'); }
-    finally { setLoginLoading(false); }
+    e.preventDefault();
+    if (otpCooldown > 0) {
+      setOtpError(`Too many requests. Please wait ${otpCooldown}s before retrying.`);
+      return;
+    }
+    if (phoneNumber.length < 8) return;
+
+    setLoginLoading(true);
+    setOtpError('');
+
+    try {
+      const result = await sendOTP(phoneNumber, 'recaptcha-container');
+      setConfirmationResult(result);
+      setOtpSent(true);
+      setOtpCooldown(60);
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/too-many-requests' || code === 'auth/quota-exceeded') {
+        setOtpError('Too many OTP requests. Please try again in a minute.');
+        setOtpCooldown(60);
+      } else if (code === 'auth/invalid-phone-number') {
+        setOtpError('Invalid phone number format. Please use the correct country code and number.');
+      } else if (code === 'auth/missing-phone-number') {
+        setOtpError('Please enter your phone number.');
+      } else {
+        setOtpError('Unable to send OTP right now. Please try again later.');
+      }
+    } finally {
+      setLoginLoading(false);
+    }
   };
   const handleVerifyOTP = async (e) => {
-    e.preventDefault(); if (!confirmationResult || otp.length < 4) return;
-    setLoginLoading(true); setOtpError('');
-    try { const user = await verifyOTP(confirmationResult, otp); const profile = await getUserProfile(user.uid); setUserId(user.uid); setUserProfile(profile); setOnline(user.uid); setupSignalListener(user.uid); }
-    catch (err) { setOtpError('Invalid OTP. Please try again.'); }
-    finally { setLoginLoading(false); }
+    e.preventDefault();
+    if (!confirmationResult || otp.length < 4) return;
+    setLoginLoading(true);
+    setOtpError('');
+    try {
+      const user = await verifyOTP(confirmationResult, otp);
+      const profile = await getUserProfile(user.uid);
+      setUserId(user.uid);
+      setUserProfile(profile);
+      setOnline(user.uid);
+      setupSignalListener(user.uid);
+      setShowWelcome(true);
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/invalid-verification-code') {
+        setOtpError('Invalid OTP. Please check the code and try again.');
+      } else if (code === 'auth/code-expired') {
+        setOtpError('OTP expired. Request a new code.');
+        setOtpSent(false);
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleEmailSignUp = async (e) => {
+    e.preventDefault();
+    if (!email || !password || !displayName) return;
+    setLoginLoading(true);
+    setOtpError('');
+    try {
+      const user = await signUpWithEmail(email, password, displayName);
+      const profile = await getUserProfile(user.uid);
+      setUserId(user.uid);
+      setUserProfile(profile);
+      setOnline(user.uid);
+      setupSignalListener(user.uid);
+      setShowWelcome(true);
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/email-already-in-use') {
+        setOtpError('Email already in use. Try signing in instead.');
+      } else if (code === 'auth/weak-password') {
+        setOtpError('Password is too weak. Please choose a stronger password.');
+      } else if (code === 'auth/invalid-email') {
+        setOtpError('Invalid email address.');
+      } else {
+        setOtpError('Failed to sign up. Please try again.');
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleEmailSignIn = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setLoginLoading(true);
+    setOtpError('');
+    try {
+      const user = await signInWithEmail(email, password);
+      const profile = await getUserProfile(user.uid);
+      setUserId(user.uid);
+      setUserProfile(profile);
+      setOnline(user.uid);
+      setupSignalListener(user.uid);
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+        setOtpError('Invalid email or password.');
+      } else if (code === 'auth/invalid-email') {
+        setOtpError('Invalid email address.');
+      } else {
+        setOtpError('Failed to sign in. Please try again.');
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email) {
+      setOtpError('Please enter your email first.');
+      return;
+    }
+    try {
+      await sendPasswordReset(email);
+      setOtpError('Password reset email sent. Check your inbox.');
+    } catch (err: any) {
+      setOtpError('Failed to send reset email. Please try again.');
+    }
   };
 
   // â”€â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -940,36 +1071,114 @@ export default function App() {
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center"
         >
-          <img src='/logo.png' className='w-28 h-28 object-contain mx-auto mb-2' style={{mixBlendMode:'multiply'}} alt='9jaTalk'/>
-
+          <img src='/logo.png' className='w-36 h-36 object-contain mx-auto mb-2' style={{mixBlendMode:'multiply'}} alt='9jaTalk'/>
 
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome to 9jaTalk</h1>
-          <p className="text-gray-500 mb-6">{otpSent ? 'Enter the OTP sent to ' + phoneNumber : 'Enter your phone number to get started'}</p>
+          
+          {/* Login Method Tabs */}
+          <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setLoginMethod('phone')}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${loginMethod === 'phone' ? 'bg-[#008751] text-white' : 'text-gray-600'}`}
+            >
+              Phone
+            </button>
+            <button
+              onClick={() => setLoginMethod('email')}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${loginMethod === 'email' ? 'bg-[#008751] text-white' : 'text-gray-600'}`}
+            >
+              Email
+            </button>
+          </div>
+
           <div id="recaptcha-container"></div>
-          {!otpSent ? (
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <input type="tel" placeholder="+234 801 234 5678" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)}/>
-              {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
-              <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
-                {loginLoading ? 'Sending OTP...' : 'Send OTP'}
-              </button>
-            </form>
+          
+          {loginMethod === 'phone' ? (
+            <>
+              <p className="text-gray-500 mb-6">{otpSent ? 'Enter the OTP sent to ' + phoneNumber : 'Enter your phone number to get started'}</p>
+              {!otpSent ? (
+                <form onSubmit={handleSendOTP} className="space-y-4">
+                  <input type="tel" placeholder="+234 801 234 5678" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)}/>
+                  {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
+                  {otpCooldown > 0 && (
+                    <p className="text-xs text-yellow-600">Please wait {otpCooldown}s before requesting a new OTP.</p>
+                  )}
+                  <button type="submit" disabled={loginLoading || otpCooldown > 0} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
+                    {loginLoading ? 'Sending OTP...' : otpCooldown > 0 ? `Wait ${otpCooldown}s` : 'Send OTP'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOTP} className="space-y-4">
+                  <div className="flex gap-2 justify-center">
+                    <input type="text" inputMode="numeric" maxLength={6} placeholder="Enter 6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] text-center text-2xl font-bold tracking-widest" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/>
+                  </div>
+                  {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
+                  <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
+                    {loginLoading ? 'Verifying...' : 'Verify OTP'}
+                  </button>
+                  <button type="button" onClick={()=>{setOtpSent(false);setOtp('');setOtpError('');}} className="w-full text-gray-500 text-sm py-2 hover:text-gray-700">
+                    Change number
+                  </button>
+                </form>
+              )}
+            </>
           ) : (
-            <form onSubmit={handleVerifyOTP} className="space-y-4">
-              <div className="flex gap-2 justify-center">
-                <input type="text" inputMode="numeric" maxLength={6} placeholder="Enter 6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] text-center text-2xl font-bold tracking-widest" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}/>
-              </div>
-              {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
-              <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
-                {loginLoading ? 'Verifying...' : 'Verify OTP'}
-              </button>
-              <button type="button" onClick={()=>{setOtpSent(false);setOtp('');setOtpError('');}} className="w-full text-gray-500 text-sm py-2 hover:text-gray-700">
-                Change number
-              </button>
-            </form>
+            <>
+              <p className="text-gray-500 mb-6">Enter your email and password to get started</p>
+              {!otpSent ? (
+                <form onSubmit={handleEmailSignUp} className="space-y-4">
+                  <input type="text" placeholder="Display Name" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={displayName} onChange={e=>setDisplayName(e.target.value)}/>
+                  <input type="email" placeholder="Email" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={email} onChange={e=>setEmail(e.target.value)}/>
+                  <input type="password" placeholder="Password" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={password} onChange={e=>setPassword(e.target.value)}/>
+                  {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
+                  <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
+                    {loginLoading ? 'Signing Up...' : 'Sign Up'}
+                  </button>
+                  <button type="button" onClick={() => setOtpSent(true)} className="w-full text-gray-500 text-sm py-2 hover:text-gray-700">
+                    Already have an account? Sign In
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleEmailSignIn} className="space-y-4">
+                  <input type="email" placeholder="Email" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={email} onChange={e=>setEmail(e.target.value)}/>
+                  <input type="password" placeholder="Password" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#008751] transition-all text-lg" value={password} onChange={e=>setPassword(e.target.value)}/>
+                  {otpError && <p className="text-red-500 text-sm">{otpError}</p>}
+                  <button type="submit" disabled={loginLoading} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg disabled:opacity-60">
+                    {loginLoading ? 'Signing In...' : 'Sign In'}
+                  </button>
+                  <button type="button" onClick={() => setOtpSent(false)} className="w-full text-gray-500 text-sm py-2 hover:text-gray-700">
+                    Don't have an account? Sign Up
+                  </button>
+                  <button type="button" onClick={handlePasswordReset} className="w-full text-gray-400 text-xs py-1 hover:text-gray-600">
+                    Forgot Password?
+                  </button>
+                </form>
+              )}
+            </>
           )}
+          
           <p className="mt-6 text-xs text-gray-400">By continuing, you agree to our Terms of Service and Privacy Policy.</p>
-          <p className="mt-4 text-[10px] text-gray-300">Designed by Thompson Obosa</p>
+          <p className="mt-4 text-[10px] text-green-400 animate-pulse">Designed by Thompson Obosa</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Welcome screen after registration
+  if (showWelcome) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{backgroundImage:"url('/bg.png')",backgroundSize:'cover',backgroundPosition:'center'}}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center"
+        >
+          <img src='/logo.png' className='w-36 h-36 object-contain mx-auto mb-4' style={{mixBlendMode:'multiply'}} alt='9jaTalk'/>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome!</h1>
+          <p className="text-gray-500 mb-6">You're all set up. Let's start chatting!</p>
+          <button onClick={() => setShowWelcome(false)} className="w-full bg-[#008751] text-white font-bold py-3 rounded-xl hover:bg-[#006b40] transition-colors shadow-lg">
+            Start Chatting
+          </button>
+          <p className="mt-4 text-[10px] text-green-400 animate-pulse">Designed by Thompson Obosa</p>
         </motion.div>
       </div>
     );
@@ -993,7 +1202,7 @@ export default function App() {
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 200, damping: 18 }}
-              className="w-32 h-32 object-contain mb-6 drop-shadow-2xl"
+              className="w-42 h-42 object-contain mb-6 drop-shadow-2xl"
             />
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
@@ -1016,7 +1225,7 @@ export default function App() {
               transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
               className="w-8 h-8 border-4 border-white border-t-transparent rounded-full"
             />
-            <p className="absolute bottom-6 text-green-300 text-xs">Designed by Thompson Obosa</p>
+            <p className="absolute bottom-6 text-green-300 text-xs animate-pulse">Designed by Thompson Obosa</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1080,6 +1289,12 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                </div>
+              ) : calling.incoming && calling.type === 'video' && localStream ? (
+                <div className="relative w-48 h-64 rounded-2xl overflow-hidden border-4 border-white/30">
+                  <video autoPlay muted playsInline
+                    className="w-full h-full object-cover"
+                    ref={(el) => { if (el && localStream) el.srcObject = localStream; }} />
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-6">
@@ -1313,7 +1528,7 @@ export default function App() {
                             ) : msg.type === 'audio' ? (
                               <audio src={msg.content} controls className="max-w-full" />
                             ) : (
-                              <p className="text-sm text-gray-800 leading-relaxed break-words">{msg.content}</p>
+                              <p className="text-base text-gray-800 leading-relaxed break-words">{msg.content}</p>
                             )}
 
                             {/* Translation */}
@@ -1449,7 +1664,7 @@ export default function App() {
         {/* ── TOP TAB BAR ───────────────────────────────────────────────────── */}
         <div className="flex-shrink-0 bg-[#008751] text-white shadow-md">
           <div className="flex items-center px-4 pt-3 pb-0">
-            <img src="/logo.png" alt="9jaTalk" className="w-7 h-7 object-contain mr-2" style={{ mixBlendMode: 'screen' }} />
+            <img src="/logo.png" alt="9jaTalk" className="w-9 h-9 object-contain mr-2" style={{ mixBlendMode: 'screen' }} />
             <span className="font-extrabold text-lg tracking-wide flex-1">9jaTalk</span>
             <button
               onClick={() => setShowNewChat(true)}

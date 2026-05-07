@@ -6,6 +6,9 @@ import {
   RecaptchaVerifier,
   updateProfile,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   type User,
   type ConfirmationResult
 } from 'firebase/auth';
@@ -129,6 +132,65 @@ export const verifyOTP = async (
   }
 
   return user;
+};
+
+// Email auth functions
+export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<User> => {
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  const user = result.user;
+
+  // Update display name
+  await updateProfile(user, { displayName });
+
+  // Create user profile
+  const userRef = ref(db, `users/${user.uid}`);
+  await set(userRef, {
+    id: user.uid,
+    phoneNumber: '',
+    username: displayName,
+    email: email,
+    avatarUrl: '',
+    lastSeen: Date.now(),
+    pushEnabled: true,
+    readReceipts: true,
+    lastSeenStatus: true,
+    screenshotProtection: false,
+    disappearingTimer: 0,
+    ringtone: 'Default',
+    messageTone: 'Default',
+    createdAt: Date.now()
+  });
+
+  // Seed support bot if not exists
+  const supportRef = ref(db, 'users/support');
+  const supportSnap = await get(supportRef);
+  if (!supportSnap.exists()) {
+    await set(supportRef, {
+      id: 'support',
+      phoneNumber: '00000',
+      username: '9jaTalk Support',
+      avatarUrl: 'https://i.pravatar.cc/150?u=support',
+      lastSeen: Date.now(),
+      isBot: true
+    });
+  }
+
+  return user;
+};
+
+export const signInWithEmail = async (email: string, password: string): Promise<User> => {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  const user = result.user;
+
+  // Update last seen
+  const userRef = ref(db, `users/${user.uid}`);
+  await update(userRef, { lastSeen: Date.now() });
+
+  return user;
+};
+
+export const sendPasswordReset = async (email: string) => {
+  await sendPasswordResetEmail(auth, email);
 };
 
 export const onAuthChange = (cb: (user: User | null) => void) =>
