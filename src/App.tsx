@@ -370,35 +370,42 @@ export default function App() {
     unsubSignals.current?.();
     unsubSignals.current = listenSignals(uid, (signal) => {
       if (signal.type === 'call:incoming') {
-        // Play ring sound for incoming call
-        try {
-          const ctx = new AudioContext();
-          const playRing = () => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain); gain.connect(ctx.destination);
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(880, ctx.currentTime);
-            osc.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
-            gain.gain.setValueAtTime(0.4, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.8);
-          };
-          playRing();
-          const ringInterval = setInterval(playRing, 2000);
-          (window as any)._ringInterval = ringInterval;
-        } catch (e) {}
+        // Check if this is an answer from receiver (contains SDP) or new call invitation
+        if (signal.payload.sdp && calling && !calling.incoming && calling.remoteId === signal.fromId) {
+          // This is the receiver's answer - establish WebRTC connection
+          createWebRTCCall(calling.type, signal.fromId, false, signal.payload.sdp);
+        } else if (!calling || !calling.active) {
+          // This is a new call invitation
+          // Play ring sound for incoming call
+          try {
+            const ctx = new AudioContext();
+            const playRing = () => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.connect(gain); gain.connect(ctx.destination);
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(880, ctx.currentTime);
+              osc.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
+              gain.gain.setValueAtTime(0.4, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+              osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.8);
+            };
+            playRing();
+            const ringInterval = setInterval(playRing, 2000);
+            (window as any)._ringInterval = ringInterval;
+          } catch (e) {}
 
-        const transport = signal.payload.transport || 'webrtc';
-        setCalling({
-          active: true, incoming: true,
-          type: signal.payload.callType,
-          remoteId: signal.fromId,
-          signal: transport === 'webrtc' ? signal.payload.sdp : signal.payload.channel,
-          transport
-        });
+          const transport = signal.payload.transport || 'webrtc';
+          setCalling({
+            active: true, incoming: true,
+            type: signal.payload.callType,
+            remoteId: signal.fromId,
+            signal: transport === 'webrtc' ? signal.payload.sdp : signal.payload.channel,
+            transport
+          });
+        }
       } else if (signal.type === 'call:answer') {
-        // Receiver answered, now establish WebRTC connection
+        // Fallback for old signaling - receiver answered with 'call:answer'
         if (calling && !calling.incoming && signal.payload.transport === 'webrtc') {
           createWebRTCCall(calling.type, signal.fromId, false, signal.payload.sdp);
         }
@@ -617,6 +624,14 @@ export default function App() {
 
   const answerCall = async () => {
     if (!calling?.remoteId || !userId) return;
+    
+    // Request permissions before answering
+    const hasPermission = await requestMediaPermissions(calling.type === 'video');
+    if (!hasPermission) {
+      alert('Camera and microphone permissions are required for calls.');
+      return;
+    }
+    
     if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
 
     const transport = calling.transport || 'webrtc';
@@ -628,7 +643,7 @@ export default function App() {
       return;
     }
 
-    // Create WebRTC call as initiator (receiver creates the offer)
+    // Create WebRTC call as initiator (receiver creates the offer) and send answer signal
     await createWebRTCCall(calling.type, calling.remoteId, true);
   };
 
