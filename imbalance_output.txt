@@ -1,0 +1,19 @@
+Line 1341 (depth=4, delta=+0):               {/* Chat header */}
+Line 1342 (depth=4, delta=+0):               <div className="flex items-center gap-3 px-3 py-2 bg-[#008751] text-white shadow-md flex-shrink-0">
+Line 1343 (depth=4, delta=+0):                 <button
+Line 1344 (depth=4, delta=+0):                   onClick={() => setActiveChat(null)}
+Line 1345 (depth=4, delta=+0):                   className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
+Line 1346 (depth=4, delta=+0):                 >
+Line 1347 (depth=4, delta=+0):                   <ArrowLeft className="w-5 h-5" />
+Line 1348 (depth=4, delta=+0):                 </button>
+Line 1349 (depth=4, delta=+0):                 <img
+Line 1350 (depth=4, delta=+0):                   src={activeChat.avatar}
+Line 1351 (depth=4, delta=+0):                   alt={activeChat.name}
+Line 1352 (depth=4, delta=+0):                   className="w-9 h-9 rounded-full object-cover border-2 border-white/40"
+Line 1353 (depth=4, delta=+0):                 />
+Line 1354 (depth=4, delta=+0):                 <div className="flex-1 min-w-0">
+Line 1355 (depth=4, delta=+0):                   <p className="font-semibold text-sm leading-tight truncate">{activeChat.name}</p>
+Line 1356 (depth=4, delta=+0):                   <p className="text-green-200 text-xs">
+Line 1357 (depth=4, delta=+0):                     {activeChat.typing ? 'typing...' : (activeChat.online ? 'online' : '')}
+Line 1358 (depth=4, delta=+0):                   </p>
+Line 1359 (depth=4, delta=+0):                 </div>

@@ -1,0 +1,461 @@
+Line 1801 (depth=4):         {activeTab === 'chats' && !activeChat && (
+Line 1802 (depth=4):           <motion.button
+Line 1803 (depth=4):             whileTap={{ scale: 0.9 }}
+Line 1804 (depth=4):             onClick={() => setShowNewChat(true)}
+Line 1805 (depth=4):             className="absolute bottom-16 right-4 w-14 h-14 bg-[#008751] rounded-full shadow-xl flex
+Line 1806 (depth=4):           >
+Line 1807 (depth=4):             <MessageSquare className="w-6 h-6 text-white" />
+Line 1808 (depth=4):           </motion.button>
+Line 1809 (depth=3):         )}
+Line 1810 (depth=3):       </div>
+Line 1811 (depth=3): 
+Line 1812 (depth=3):       {/* ── NEW CHAT MODAL ────────────────────────────────────────────────── */}
+Line 1813 (depth=3):       <AnimatePresence>
+Line 1814 (depth=4):         {showNewChat && (
+Line 1815 (depth=4):           <motion.div
+Line 1816 (depth=4):             key="new-chat-modal"
+Line 1817 (depth=4):             initial={{ opacity: 0 }}
+Line 1818 (depth=4):             animate={{ opacity: 1 }}
+Line 1819 (depth=4):             exit={{ opacity: 0 }}
+Line 1820 (depth=4):             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+Line 1821 (depth=4):             onClick={() => setShowNewChat(false)}
+Line 1822 (depth=4):           >
+Line 1823 (depth=4):             <motion.div
+Line 1824 (depth=4):               initial={{ scale: 0.9, opacity: 0 }}
+Line 1825 (depth=4):               animate={{ scale: 1, opacity: 1 }}
+Line 1826 (depth=4):               exit={{ scale: 0.9, opacity: 0 }}
+Line 1827 (depth=4):               onClick={(e) => e.stopPropagation()}
+Line 1828 (depth=4):               className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+Line 1829 (depth=4):             >
+Line 1830 (depth=4):               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+Line 1831 (depth=4):                 <h3 className="text-lg font-bold text-gray-800">New Chat</h3>
+Line 1832 (depth=4):                 <button
+Line 1833 (depth=4):                   onClick={() => setShowNewChat(false)}
+Line 1834 (depth=4):                   className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+Line 1835 (depth=4):                 >
+Line 1836 (depth=4):                   <X className="w-5 h-5 text-gray-500" />
+Line 1837 (depth=4):                 </button>
+Line 1838 (depth=4):               </div>
+Line 1839 (depth=4):               <form onSubmit={handleStartNewChat} className="p-5 space-y-4">
+Line 1840 (depth=4):                 <div>
+Line 1841 (depth=4):                   <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</la
+Line 1842 (depth=4):                   <input
+Line 1843 (depth=4):                     type="tel"
+Line 1844 (depth=4):                     placeholder="+234 801 234 5678"
+Line 1845 (depth=4):                     value={newChatNumber}
+Line 1846 (depth=4):                     onChange={(e) => setNewChatNumber(e.target.value)}
+Line 1847 (depth=4):                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none
+Line 1848 (depth=4):                   />
+Line 1849 (depth=4):                 </div>
+Line 1850 (depth=4):                 <div className="flex gap-3">
+Line 1851 (depth=4):                   <button
+Line 1852 (depth=4):                     type="button"
+Line 1853 (depth=4):                     onClick={handlePickContacts}
+Line 1854 (depth=4):                     className="flex-1 bg-gray-100 text-gray-700 font-semibold py-3 rounded-xl hover:
+Line 1855 (depth=4):                   >
+Line 1856 (depth=4):                     Pick from Contacts
+Line 1857 (depth=4):                   </button>
+Line 1858 (depth=4):                   <button
+Line 1859 (depth=4):                     type="submit"
+Line 1860 (depth=4):                     className="flex-1 bg-[#008751] text-white font-semibold py-3 rounded-xl hover:bg
+Line 1861 (depth=4):                   >
+Line 1862 (depth=4):                     Start Chat
+Line 1863 (depth=4):                   </button>
+Line 1864 (depth=4):                 </div>
+Line 1865 (depth=4):               </form>
+Line 1866 (depth=4):             </motion.div>
+Line 1867 (depth=4):           </motion.div>
+Line 1868 (depth=3):         )}
+Line 1869 (depth=3):       </AnimatePresence>
+Line 1870 (depth=3): 
+Line 1871 (depth=3):       {/* ── GROUP MODAL ───────────────────────────────────────────────────── */}
+Line 1872 (depth=3):       <AnimatePresence>
+Line 1873 (depth=4):         {showGroupModal && (
+Line 1874 (depth=4):           <motion.div
+Line 1875 (depth=4):             key="group-modal"
+Line 1876 (depth=4):             initial={{ opacity: 0 }}
+Line 1877 (depth=4):             animate={{ opacity: 1 }}
+Line 1878 (depth=4):             exit={{ opacity: 0 }}
+Line 1879 (depth=4):             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+Line 1880 (depth=4):             onClick={() => setShowGroupModal(false)}
+Line 1881 (depth=4):           >
+Line 1882 (depth=4):             <motion.div
+Line 1883 (depth=4):               initial={{ scale: 0.9, opacity: 0 }}
+Line 1884 (depth=4):               animate={{ scale: 1, opacity: 1 }}
+Line 1885 (depth=4):               exit={{ scale: 0.9, opacity: 0 }}
+Line 1886 (depth=4):               onClick={(e) => e.stopPropagation()}
+Line 1887 (depth=4):               className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+Line 1888 (depth=4):             >
+Line 1889 (depth=4):               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+Line 1890 (depth=4):                 <h3 className="text-lg font-bold text-gray-800">New Group</h3>
+Line 1891 (depth=4):                 <button
+Line 1892 (depth=4):                   onClick={() => setShowGroupModal(false)}
+Line 1893 (depth=4):                   className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+Line 1894 (depth=4):                 >
+Line 1895 (depth=4):                   <X className="w-5 h-5 text-gray-500" />
+Line 1896 (depth=4):                 </button>
+Line 1897 (depth=4):               </div>
+Line 1898 (depth=4):               <form onSubmit={handleCreateGroup} className="p-5 space-y-4">
+Line 1899 (depth=4):                 <div>
+Line 1900 (depth=4):                   <label className="block text-sm font-semibold text-gray-700 mb-2">Group Name</labe
+Line 1901 (depth=4):                   <input
+Line 1902 (depth=4):                     type="text"
+Line 1903 (depth=4):                     placeholder="Family, Friends, Work..."
+Line 1904 (depth=4):                     value={groupName}
+Line 1905 (depth=4):                     onChange={(e) => setGroupName(e.target.value)}
+Line 1906 (depth=4):                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none
+Line 1907 (depth=4):                   />
+Line 1908 (depth=4):                 </div>
+Line 1909 (depth=4):                 <button
+Line 1910 (depth=4):                   type="submit"
+Line 1911 (depth=4):                   className="w-full bg-[#008751] text-white font-semibold py-3 rounded-xl hover:bg-[
+Line 1912 (depth=4):                 >
+Line 1913 (depth=4):                   Create Group
+Line 1914 (depth=4):                 </button>
+Line 1915 (depth=4):               </form>
+Line 1916 (depth=4):             </motion.div>
+Line 1917 (depth=4):           </motion.div>
+Line 1918 (depth=3):         )}
+Line 1919 (depth=3):       </AnimatePresence>
+Line 1920 (depth=3): 
+Line 1921 (depth=3):       {/* ── STATUS VIEWER ─────────────────────────────────────────────────── */}
+Line 1922 (depth=3):       <AnimatePresence>
+Line 1923 (depth=4):         {viewingStatus && (
+Line 1924 (depth=4):           <motion.div
+Line 1925 (depth=4):             key="status-viewer"
+Line 1926 (depth=4):             initial={{ opacity: 0 }}
+Line 1927 (depth=4):             animate={{ opacity: 1 }}
+Line 1928 (depth=4):             exit={{ opacity: 0 }}
+Line 1929 (depth=4):             className="fixed inset-0 z-[100] flex flex-col bg-black"
+Line 1930 (depth=4):             onClick={() => setViewingStatus(null)}
+Line 1931 (depth=4):           >
+Line 1932 (depth=4):             <div className="flex items-center gap-3 px-4 py-3 bg-black/50 absolute top-0 left-0 righ
+Line 1933 (depth=4):               <button
+Line 1934 (depth=4):                 onClick={() => setViewingStatus(null)}
+Line 1935 (depth=4):                 className="p-1 rounded-full hover:bg-white/20 transition-colors"
+Line 1936 (depth=4):               >
+Line 1937 (depth=4):                 <X className="w-5 h-5 text-white" />
+Line 1938 (depth=4):               </button>
+Line 1939 (depth=4):               <img
+Line 1940 (depth=4):                 src={userProfile?.avatarUrl || ("https://i.pravatar.cc/150?u=" + viewingStatus.userI
+Line 1941 (depth=4):                 alt="user"
+Line 1942 (depth=4):                 className="w-9 h-9 rounded-full object-cover border-2 border-white/40"
+Line 1943 (depth=4):               />
+Line 1944 (depth=4):               <div>
+Line 1945 (depth=4):                 <p className="text-white font-semibold text-sm">{viewingStatus.userId}</p>
+Line 1946 (depth=4):                 <p className="text-white/70 text-xs">
+Line 1947 (depth=4):                   {new Date(viewingStatus.createdAt).toLocaleTimeString([], { hour: '2-digit', minut
+Line 1948 (depth=4):                 </p>
+Line 1949 (depth=4):               </div>
+Line 1950 (depth=4):             </div>
+Line 1951 (depth=4):             <div className="flex-1 flex items-center justify-center">
+Line 1952 (depth=5):               {viewingStatus.type === 'image' ? (
+Line 1953 (depth=5):                 <img
+Line 1954 (depth=5):                   src={viewingStatus.content}
+Line 1955 (depth=5):                   alt="status"
+Line 1956 (depth=5):                   className="max-w-full max-h-full object-contain"
+Line 1957 (depth=5):                 />
+Line 1958 (depth=5):               ) : (
+Line 1959 (depth=5):                 <video
+Line 1960 (depth=5):                   src={viewingStatus.content}
+Line 1961 (depth=5):                   controls
+Line 1962 (depth=5):                   autoPlay
+Line 1963 (depth=5):                   className="max-w-full max-h-full"
+Line 1964 (depth=5):                 />
+Line 1965 (depth=4):               )}
+Line 1966 (depth=4):             </div>
+Line 1967 (depth=4):           </motion.div>
+Line 1968 (depth=3):         )}
+Line 1969 (depth=3):       </AnimatePresence>
+Line 1970 (depth=3): 
+Line 1971 (depth=3):       {/* ── SETTINGS BOTTOM SHEET ─────────────────────────────────────────── */}
+Line 1972 (depth=3):       <AnimatePresence>
+Line 1973 (depth=4):         {showSettings && (
+Line 1974 (depth=4):           <motion.div
+Line 1975 (depth=4):             key="settings-overlay"
+Line 1976 (depth=4):             initial={{ opacity: 0 }}
+Line 1977 (depth=4):             animate={{ opacity: 1 }}
+Line 1978 (depth=4):             exit={{ opacity: 0 }}
+Line 1979 (depth=4):             className="fixed inset-0 z-[100] bg-black/50"
+Line 1980 (depth=4):             onClick={() => setShowSettings(false)}
+Line 1981 (depth=4):           >
+Line 1982 (depth=4):             <motion.div
+Line 1983 (depth=4):               initial={{ y: '100%' }}
+Line 1984 (depth=4):               animate={{ y: 0 }}
+Line 1985 (depth=4):               exit={{ y: '100%' }}
+Line 1986 (depth=4):               transition={{ type: 'tween', duration: 0.25 }}
+Line 1987 (depth=4):               onClick={(e) => e.stopPropagation()}
+Line 1988 (depth=4):               className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl max-h-[8
+Line 1989 (depth=4):             >
+Line 1990 (depth=4):               {/* Header */}
+Line 1991 (depth=4):               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 f
+Line 1992 (depth=4):                 <h3 className="text-xl font-bold text-gray-800">Settings</h3>
+Line 1993 (depth=4):                 <button
+Line 1994 (depth=4):                   onClick={() => setShowSettings(false)}
+Line 1995 (depth=4):                   className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+Line 1996 (depth=4):                 >
+Line 1997 (depth=4):                   <X className="w-5 h-5 text-gray-500" />
+Line 1998 (depth=4):                 </button>
+Line 1999 (depth=4):               </div>
+Line 2000 (depth=4): 
+Line 2001 (depth=4):               {/* Tabs */}
+Line 2002 (depth=4):               <div className="flex border-b border-gray-100 flex-shrink-0">
+Line 2003 (depth=5):                 {(['account', 'privacy', 'notifications', 'backup'] as const).map((tab) => (
+Line 2004 (depth=5):                   <button
+Line 2005 (depth=5):                     key={tab}
+Line 2006 (depth=5):                     onClick={() => setActiveSettingsTab(tab)}
+Line 2007 (depth=5):                     className={"flex-1 py-3 text-xs font-semibold capitalize transition-colors relat
+Line 2008 (depth=5):                   >
+Line 2009 (depth=5):                     {tab}
+Line 2010 (depth=6):                     {activeSettingsTab === tab && (
+Line 2011 (depth=6):                       <motion.div
+Line 2012 (depth=6):                         layoutId="settings-tab-indicator"
+Line 2013 (depth=6):                         className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#008751] rounded-full"
+Line 2014 (depth=6):                       />
+Line 2015 (depth=5):                     )}
+Line 2016 (depth=5):                   </button>
+Line 2017 (depth=4):                 ))}
+Line 2018 (depth=4):               </div>
+Line 2019 (depth=4): 
+Line 2020 (depth=4):               {/* Content */}
+Line 2021 (depth=4):               <div className="flex-1 overflow-y-auto scrollbar-hide">
+Line 2022 (depth=4):                 {/* ACCOUNT TAB */}
+Line 2023 (depth=5):                 {activeSettingsTab === 'account' && (
+Line 2024 (depth=5):                   <div className="p-5 space-y-5">
+Line 2025 (depth=5):                     {/* Avatar */}
+Line 2026 (depth=5):                     <div className="flex flex-col items-center gap-3">
+Line 2027 (depth=5):                       <div className="relative">
+Line 2028 (depth=5):                         <img
+Line 2029 (depth=5):                           src={userProfile?.avatarUrl || ("https://i.pravatar.cc/150?u=" + userId)}
+Line 2030 (depth=5):                           alt="me"
+Line 2031 (depth=5):                           className="w-24 h-24 rounded-full object-cover border-4 border-[#008751]/2
+Line 2032 (depth=5):                         />
+Line 2033 (depth=5):                         <label className="absolute bottom-0 right-0 w-8 h-8 bg-[#008751] rounded-ful
+Line 2034 (depth=5):                           <UserIcon className="w-4 h-4 text-white" />
+Line 2035 (depth=5):                           <input type="file" accept="image/*" className="hidden" onChange={handleAva
+Line 2036 (depth=5):                         </label>
+Line 2037 (depth=5):                       </div>
+Line 2038 (depth=5):                       <p className="text-xs text-gray-500">Tap to change profile photo</p>
+Line 2039 (depth=5):                     </div>
+Line 2040 (depth=5): 
+Line 2041 (depth=5):                     {/* Name */}
+Line 2042 (depth=5):                     <div>
+Line 2043 (depth=5):                       <label className="block text-xs font-semibold text-gray-600 mb-1.5">Name</labe
+Line 2044 (depth=5):                       <input
+Line 2045 (depth=5):                         type="text"
+Line 2046 (depth=5):                         value={userProfile?.username || ''}
+Line 2047 (depth=5):                         onChange={(e) => handleUpdateProfile({ username: e.target.value })}
+Line 2048 (depth=5):                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outlin
+Line 2049 (depth=5):                       />
+Line 2050 (depth=5):                     </div>
+Line 2051 (depth=5): 
+Line 2052 (depth=5):                     {/* Phone */}
+Line 2053 (depth=5):                     <div>
+Line 2054 (depth=5):                       <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone</lab
+Line 2055 (depth=5):                       <input
+Line 2056 (depth=5):                         type="tel"
+Line 2057 (depth=5):                         value={userProfile?.phoneNumber || ''}
+Line 2058 (depth=5):                         disabled
+Line 2059 (depth=5):                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 t
+Line 2060 (depth=5):                       />
+Line 2061 (depth=5):                     </div>
+Line 2062 (depth=5): 
+Line 2063 (depth=5):                     {/* Email */}
+Line 2064 (depth=5):                     <div>
+Line 2065 (depth=5):                       <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email</lab
+Line 2066 (depth=5):                       <input
+Line 2067 (depth=5):                         type="email"
+Line 2068 (depth=5):                         value={userProfile?.email || ''}
+Line 2069 (depth=5):                         onChange={(e) => handleUpdateProfile({ email: e.target.value })}
+Line 2070 (depth=5):                         placeholder="your@email.com"
+Line 2071 (depth=5):                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outlin
+Line 2072 (depth=5):                       />
+Line 2073 (depth=5):                     </div>
+Line 2074 (depth=5): 
+Line 2075 (depth=5):                     {/* Sign out */}
+Line 2076 (depth=5):                     <button
+Line 2077 (depth=7):                       onClick={() => {
+Line 2078 (depth=8):                         if (confirm('Sign out of 9jaTalk?')) {
+Line 2079 (depth=8):                           auth.signOut();
+Line 2080 (depth=8):                           window.location.reload();
+Line 2081 (depth=7):                         }
+Line 2082 (depth=5):                       }}
+Line 2083 (depth=5):                       className="w-full bg-red-50 text-red-600 font-semibold py-3 rounded-xl hover:b
+Line 2084 (depth=5):                     >
+Line 2085 (depth=5):                       Sign Out
+Line 2086 (depth=5):                     </button>
+Line 2087 (depth=5):                   </div>
+Line 2088 (depth=4):                 )}
+Line 2089 (depth=4): 
+Line 2090 (depth=4):                 {/* PRIVACY TAB */}
+Line 2091 (depth=5):                 {activeSettingsTab === 'privacy' && (
+Line 2092 (depth=5):                   <div className="p-5 space-y-4">
+Line 2093 (depth=5):                     <div className="flex items-center justify-between py-2">
+Line 2094 (depth=5):                       <div>
+Line 2095 (depth=5):                         <p className="text-sm font-semibold text-gray-800">Read Receipts</p>
+Line 2096 (depth=5):                         <p className="text-xs text-gray-500">Show when you've read messages</p>
+Line 2097 (depth=5):                       </div>
+Line 2098 (depth=5):                       <button
+Line 2099 (depth=5):                         onClick={() => handleUpdateProfile({ readReceipts: !userProfile?.readReceipt
+Line 2100 (depth=5):                         className={"w-12 h-6 rounded-full transition-colors relative " + (userProfil
+Line 2101 (depth=5):                       >
+Line 2102 (depth=5):                         <span
+Line 2103 (depth=5):                           className={"absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md trans
+Line 2104 (depth=5):                         />
+Line 2105 (depth=5):                       </button>
+Line 2106 (depth=5):                     </div>
+Line 2107 (depth=5): 
+Line 2108 (depth=5):                     <div className="flex items-center justify-between py-2">
+Line 2109 (depth=5):                       <div>
+Line 2110 (depth=5):                         <p className="text-sm font-semibold text-gray-800">Last Seen</p>
+Line 2111 (depth=5):                         <p className="text-xs text-gray-500">Show when you were last online</p>
+Line 2112 (depth=5):                       </div>
+Line 2113 (depth=5):                       <button
+Line 2114 (depth=5):                         onClick={() => handleUpdateProfile({ lastSeenStatus: !userProfile?.lastSeenS
+Line 2115 (depth=5):                         className={"w-12 h-6 rounded-full transition-colors relative " + (userProfil
+Line 2116 (depth=5):                       >
+Line 2117 (depth=5):                         <span
+Line 2118 (depth=5):                           className={"absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md trans
+Line 2119 (depth=5):                         />
+Line 2120 (depth=5):                       </button>
+Line 2121 (depth=5):                     </div>
+Line 2122 (depth=5): 
+Line 2123 (depth=5):                     <div className="flex items-center justify-between py-2">
+Line 2124 (depth=5):                       <div>
+Line 2125 (depth=5):                         <p className="text-sm font-semibold text-gray-800">Screenshot Protection</p>
+Line 2126 (depth=5):                         <p className="text-xs text-gray-500">Blur screen when app is in background</
+Line 2127 (depth=5):                       </div>
+Line 2128 (depth=5):                       <button
+Line 2129 (depth=5):                         onClick={() => handleUpdateProfile({ screenshotProtection: !userProfile?.scr
+Line 2130 (depth=5):                         className={"w-12 h-6 rounded-full transition-colors relative " + (userProfil
+Line 2131 (depth=5):                       >
+Line 2132 (depth=5):                         <span
+Line 2133 (depth=5):                           className={"absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md trans
+Line 2134 (depth=5):                         />
+Line 2135 (depth=5):                       </button>
+Line 2136 (depth=5):                     </div>
+Line 2137 (depth=5): 
+Line 2138 (depth=5):                     <div className="pt-3 border-t border-gray-100">
+Line 2139 (depth=5):                       <p className="text-sm font-semibold text-gray-800 mb-2">Disappearing Messages<
+Line 2140 (depth=5):                       <p className="text-xs text-gray-500 mb-3">Set default timer for new chats</p>
+Line 2141 (depth=5):                       <div className="flex gap-2 flex-wrap">
+Line 2142 (depth=6):                         {[0, 60, 300, 3600, 86400].map((sec) => (
+Line 2143 (depth=6):                           <button
+Line 2144 (depth=6):                             key={sec}
+Line 2145 (depth=6):                             onClick={() => handleUpdateProfile({ disappearingTimer: sec })}
+Line 2146 (depth=6):                             className={"px-4 py-2 rounded-full text-xs font-semibold transition-colo
+Line 2147 (depth=6):                           >
+Line 2148 (depth=6):                             {sec === 0 ? 'Off' : sec === 60 ? '1m' : sec === 300 ? '5m' : sec === 36
+Line 2149 (depth=6):                           </button>
+Line 2150 (depth=5):                         ))}
+Line 2151 (depth=5):                       </div>
+Line 2152 (depth=5):                     </div>
+Line 2153 (depth=5):                   </div>
+Line 2154 (depth=4):                 )}
+Line 2155 (depth=4): 
+Line 2156 (depth=4):                 {/* NOTIFICATIONS TAB */}
+Line 2157 (depth=5):                 {activeSettingsTab === 'notifications' && (
+Line 2158 (depth=5):                   <div className="p-5 space-y-4">
+Line 2159 (depth=5):                     <div className="flex items-center justify-between py-2">
+Line 2160 (depth=5):                       <div>
+Line 2161 (depth=5):                         <p className="text-sm font-semibold text-gray-800">Push Notifications</p>
+Line 2162 (depth=5):                         <p className="text-xs text-gray-500">Receive notifications for new messages<
+Line 2163 (depth=5):                       </div>
+Line 2164 (depth=5):                       <button
+Line 2165 (depth=5):                         onClick={() => handleUpdateProfile({ pushEnabled: !userProfile?.pushEnabled 
+Line 2166 (depth=5):                         className={"w-12 h-6 rounded-full transition-colors relative " + (userProfil
+Line 2167 (depth=5):                       >
+Line 2168 (depth=5):                         <span
+Line 2169 (depth=5):                           className={"absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md trans
+Line 2170 (depth=5):                         />
+Line 2171 (depth=5):                       </button>
+Line 2172 (depth=5):                     </div>
+Line 2173 (depth=5): 
+Line 2174 (depth=5):                     <div className="pt-3 border-t border-gray-100">
+Line 2175 (depth=5):                       <p className="text-sm font-semibold text-gray-800 mb-2">Ringtone</p>
+Line 2176 (depth=5):                       <select
+Line 2177 (depth=5):                         value={userProfile?.ringtone || 'Default'}
+Line 2178 (depth=5):                         onChange={(e) => handleUpdateProfile({ ringtone: e.target.value })}
+Line 2179 (depth=5):                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outlin
+Line 2180 (depth=5):                       >
+Line 2181 (depth=5):                         <option>Default</option>
+Line 2182 (depth=5):                         <option>Classic</option>
+Line 2183 (depth=5):                         <option>Modern</option>
+Line 2184 (depth=5):                         <option>Silent</option>
+Line 2185 (depth=5):                       </select>
+Line 2186 (depth=5):                     </div>
+Line 2187 (depth=5): 
+Line 2188 (depth=5):                     <div className="pt-3 border-t border-gray-100">
+Line 2189 (depth=5):                       <p className="text-sm font-semibold text-gray-800 mb-2">Message Tone</p>
+Line 2190 (depth=5):                       <select
+Line 2191 (depth=5):                         value={userProfile?.messageTone || 'Default'}
+Line 2192 (depth=5):                         onChange={(e) => handleUpdateProfile({ messageTone: e.target.value })}
+Line 2193 (depth=5):                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outlin
+Line 2194 (depth=5):                       >
+Line 2195 (depth=5):                         <option>Default</option>
+Line 2196 (depth=5):                         <option>Chime</option>
+Line 2197 (depth=5):                         <option>Ding</option>
+Line 2198 (depth=5):                         <option>Silent</option>
+Line 2199 (depth=5):                       </select>
+Line 2200 (depth=5):                     </div>
+Line 2201 (depth=5):                   </div>
+Line 2202 (depth=4):                 )}
+Line 2203 (depth=4): 
+Line 2204 (depth=4):                 {/* BACKUP TAB */}
+Line 2205 (depth=5):                 {activeSettingsTab === 'backup' && (
+Line 2206 (depth=5):                   <div className="p-5 space-y-4">
+Line 2207 (depth=5):                     <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border
+Line 2208 (depth=5):                       <Database className="w-5 h-5 text-[#008751] flex-shrink-0" />
+Line 2209 (depth=5):                       <div>
+Line 2210 (depth=5):                         <p className="text-sm font-semibold text-gray-800">Auto Backup</p>
+Line 2211 (depth=5):                         <p className="text-xs text-gray-500">Your chats are backed up to Firebase</p
+Line 2212 (depth=5):                       </div>
+Line 2213 (depth=5):                     </div>
+Line 2214 (depth=5): 
+Line 2215 (depth=5):                     <button
+Line 2216 (depth=5):                       onClick={() => alert('Backup feature coming soon!')}
+Line 2217 (depth=5):                       className="w-full bg-[#008751] text-white font-semibold py-3 rounded-xl hover:
+Line 2218 (depth=5):                     >
+Line 2219 (depth=5):                       Backup Now
+Line 2220 (depth=5):                     </button>
+Line 2221 (depth=5): 
+Line 2222 (depth=5):                     <button
+Line 2223 (depth=5):                       onClick={() => alert('Restore feature coming soon!')}
+Line 2224 (depth=5):                       className="w-full bg-gray-100 text-gray-700 font-semibold py-3 rounded-xl hove
+Line 2225 (depth=5):                     >
+Line 2226 (depth=5):                       Restore from Backup
+Line 2227 (depth=5):                     </button>
+Line 2228 (depth=5):                   </div>
+Line 2229 (depth=4):                 )}
+Line 2230 (depth=4):               </div>
+Line 2231 (depth=4): 
+Line 2232 (depth=4):               {/* Footer branding */}
+Line 2233 (depth=4):               <div className="flex-shrink-0 flex items-center justify-center gap-2 py-3 border-t bor
+Line 2234 (depth=4):                 <img src="/logo.png" alt="9jaTalk" className="w-4 h-4 object-contain" style={{ mixBl
+Line 2235 (depth=4):                 <span className="text-[10px] text-gray-400">Designed by Thompson Obosa</span>
+Line 2236 (depth=4):               </div>
+Line 2237 (depth=4):             </motion.div>
+Line 2238 (depth=4):           </motion.div>
+Line 2239 (depth=3):         )}
+Line 2240 (depth=3):       </AnimatePresence>
+Line 2241 (depth=3): 
+Line 2242 (depth=3):       {/* ── PRIVACY BLUR OVERLAY ──────────────────────────────────────────── */}
+Line 2243 (depth=3):       <AnimatePresence>
+Line 2244 (depth=4):         {isPrivacyProtected && (
+Line 2245 (depth=4):           <motion.div
+Line 2246 (depth=4):             key="privacy-blur"
+Line 2247 (depth=4):             initial={{ opacity: 0 }}
+Line 2248 (depth=4):             animate={{ opacity: 1 }}
+Line 2249 (depth=4):             exit={{ opacity: 0 }}
+Line 2250 (depth=4):             className="fixed inset-0 z-[9998] backdrop-blur-3xl bg-white/80 flex flex-col items-cent
+Line 2251 (depth=4):           >
+Line 2252 (depth=4):             <Lock className="w-16 h-16 text-[#008751] mb-4" />
+Line 2253 (depth=4):             <p className="text-lg font-bold text-gray-800">9jaTalk is locked</p>
+Line 2254 (depth=4):             <p className="text-sm text-gray-500 mt-1">Tap to unlock</p>
+Line 2255 (depth=4):           </motion.div>
+Line 2256 (depth=3):         )}
+Line 2257 (depth=3):       </AnimatePresence>
+Line 2258 (depth=3):     </div>
+Line 2259 (depth=3):     </>
+Line 2260 (depth=3):   );
+Line 2261 (depth=2): }

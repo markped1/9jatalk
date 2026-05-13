@@ -16,10 +16,10 @@ import {
   playLocalVideo
 } from './services/agora';
 import {
-  sendOTP, verifyOTP, signUpWithEmail, signInWithEmail, sendPasswordReset, onAuthChange, getUserProfile, updateUserProfile,
+  sendOTP, verifyOTP, onAuthChange, getUserProfile, updateUserProfile,
   searchUserByPhone, setOnline,
   getChatId, sendMessage as fbSendMessage, listenMessages, listenUserChats,
-  markMessagesRead, reactToMessage, setTyping, listenTyping,
+  markMessagesRead, markMessagesDelivered, reactToMessage, setTyping, listenTyping,
   postStatus, listenStatuses, createGroup, getGroupMembers,
   listenUserGroups, sendSignal, listenSignals, uploadFile,
   getAiSuggestions, translateText, auth
@@ -57,6 +57,221 @@ type Chat = {
 // â”€â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function App() {
+    // Country selector and phone input for signup
+    const [country, setCountry] = useState({ name: 'Nigeria', code: '+234' });
+    const [countrySearch, setCountrySearch] = useState('');
+    const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+    const [rawPhone, setRawPhone] = useState('');
+    // Full country list (ISO 3166, name, code)
+    // Full country list (ISO 3166, name, code) - exhaustive and robust for search
+    const countryOptions = [
+      { name: 'Afghanistan', code: '+93' },
+      { name: 'Albania', code: '+355' },
+      { name: 'Algeria', code: '+213' },
+      { name: 'Andorra', code: '+376' },
+      { name: 'Angola', code: '+244' },
+      { name: 'Antigua and Barbuda', code: '+1-268' },
+      { name: 'Argentina', code: '+54' },
+      { name: 'Armenia', code: '+374' },
+      { name: 'Australia', code: '+61' },
+      { name: 'Austria', code: '+43' },
+      { name: 'Azerbaijan', code: '+994' },
+      { name: 'Bahamas', code: '+1-242' },
+      { name: 'Bahrain', code: '+973' },
+      { name: 'Bangladesh', code: '+880' },
+      { name: 'Barbados', code: '+1-246' },
+      { name: 'Belarus', code: '+375' },
+      { name: 'Belgium', code: '+32' },
+      { name: 'Belize', code: '+501' },
+      { name: 'Benin', code: '+229' },
+      { name: 'Bhutan', code: '+975' },
+      { name: 'Bolivia', code: '+591' },
+      { name: 'Bosnia and Herzegovina', code: '+387' },
+      { name: 'Botswana', code: '+267' },
+      { name: 'Brazil', code: '+55' },
+      { name: 'Brunei', code: '+673' },
+      { name: 'Bulgaria', code: '+359' },
+      { name: 'Burkina Faso', code: '+226' },
+      { name: 'Burundi', code: '+257' },
+      { name: 'Cabo Verde', code: '+238' },
+      { name: 'Cambodia', code: '+855' },
+      { name: 'Cameroon', code: '+237' },
+      { name: 'Canada', code: '+1' },
+      { name: 'Central African Republic', code: '+236' },
+      { name: 'Chad', code: '+235' },
+      { name: 'Chile', code: '+56' },
+      { name: 'China', code: '+86' },
+      { name: 'Colombia', code: '+57' },
+      { name: 'Comoros', code: '+269' },
+      { name: 'Congo', code: '+242' },
+      { name: 'Congo (DRC)', code: '+243' },
+      { name: 'Costa Rica', code: '+506' },
+      { name: 'Croatia', code: '+385' },
+      { name: 'Cuba', code: '+53' },
+      { name: 'Cyprus', code: '+357' },
+      { name: 'Czechia', code: '+420' },
+      { name: 'Denmark', code: '+45' },
+      { name: 'Djibouti', code: '+253' },
+      { name: 'Dominica', code: '+1-767' },
+      { name: 'Dominican Republic', code: '+1-809' },
+      { name: 'Ecuador', code: '+593' },
+      { name: 'Egypt', code: '+20' },
+      { name: 'El Salvador', code: '+503' },
+      { name: 'Equatorial Guinea', code: '+240' },
+      { name: 'Eritrea', code: '+291' },
+      { name: 'Estonia', code: '+372' },
+      { name: 'Eswatini', code: '+268' },
+      { name: 'Ethiopia', code: '+251' },
+      { name: 'Fiji', code: '+679' },
+      { name: 'Finland', code: '+358' },
+      { name: 'France', code: '+33' },
+      { name: 'Gabon', code: '+241' },
+      { name: 'Gambia', code: '+220' },
+      { name: 'Georgia', code: '+995' },
+      { name: 'Germany', code: '+49' },
+      { name: 'Ghana', code: '+233' },
+      { name: 'Greece', code: '+30' },
+      { name: 'Grenada', code: '+1-473' },
+      { name: 'Guatemala', code: '+502' },
+      { name: 'Guinea', code: '+224' },
+      { name: 'Guinea-Bissau', code: '+245' },
+      { name: 'Guyana', code: '+592' },
+      { name: 'Haiti', code: '+509' },
+      { name: 'Honduras', code: '+504' },
+      { name: 'Hungary', code: '+36' },
+      { name: 'Iceland', code: '+354' },
+      { name: 'India', code: '+91' },
+      { name: 'Indonesia', code: '+62' },
+      { name: 'Iran', code: '+98' },
+      { name: 'Iraq', code: '+964' },
+      { name: 'Ireland', code: '+353' },
+      { name: 'Israel', code: '+972' },
+      { name: 'Italy', code: '+39' },
+      { name: 'Jamaica', code: '+1-876' },
+      { name: 'Japan', code: '+81' },
+      { name: 'Jordan', code: '+962' },
+      { name: 'Kazakhstan', code: '+7' },
+      { name: 'Kenya', code: '+254' },
+      { name: 'Kiribati', code: '+686' },
+      { name: 'Kuwait', code: '+965' },
+      { name: 'Kyrgyzstan', code: '+996' },
+      { name: 'Laos', code: '+856' },
+      { name: 'Latvia', code: '+371' },
+      { name: 'Lebanon', code: '+961' },
+      { name: 'Lesotho', code: '+266' },
+      { name: 'Liberia', code: '+231' },
+      { name: 'Libya', code: '+218' },
+      { name: 'Liechtenstein', code: '+423' },
+      { name: 'Lithuania', code: '+370' },
+      { name: 'Luxembourg', code: '+352' },
+      { name: 'Madagascar', code: '+261' },
+      { name: 'Malawi', code: '+265' },
+      { name: 'Malaysia', code: '+60' },
+      { name: 'Maldives', code: '+960' },
+      { name: 'Mali', code: '+223' },
+      { name: 'Malta', code: '+356' },
+      { name: 'Marshall Islands', code: '+692' },
+      { name: 'Mauritania', code: '+222' },
+      { name: 'Mauritius', code: '+230' },
+      { name: 'Mexico', code: '+52' },
+      { name: 'Micronesia', code: '+691' },
+      { name: 'Moldova', code: '+373' },
+      { name: 'Monaco', code: '+377' },
+      { name: 'Mongolia', code: '+976' },
+      { name: 'Montenegro', code: '+382' },
+      { name: 'Morocco', code: '+212' },
+      { name: 'Mozambique', code: '+258' },
+      { name: 'Myanmar', code: '+95' },
+      { name: 'Namibia', code: '+264' },
+      { name: 'Nauru', code: '+674' },
+      { name: 'Nepal', code: '+977' },
+      { name: 'Netherlands', code: '+31' },
+      { name: 'New Zealand', code: '+64' },
+      { name: 'Nicaragua', code: '+505' },
+      { name: 'Niger', code: '+227' },
+      { name: 'Nigeria', code: '+234' },
+      { name: 'North Korea', code: '+850' },
+      { name: 'North Macedonia', code: '+389' },
+      { name: 'Norway', code: '+47' },
+      { name: 'Oman', code: '+968' },
+      { name: 'Pakistan', code: '+92' },
+      { name: 'Palau', code: '+680' },
+      { name: 'Palestine', code: '+970' },
+      { name: 'Panama', code: '+507' },
+      { name: 'Papua New Guinea', code: '+675' },
+      { name: 'Paraguay', code: '+595' },
+      { name: 'Peru', code: '+51' },
+      { name: 'Philippines', code: '+63' },
+      { name: 'Poland', code: '+48' },
+      { name: 'Portugal', code: '+351' },
+      { name: 'Qatar', code: '+974' },
+      { name: 'Romania', code: '+40' },
+      { name: 'Russia', code: '+7' },
+      { name: 'Rwanda', code: '+250' },
+      { name: 'Saint Kitts and Nevis', code: '+1-869' },
+      { name: 'Saint Lucia', code: '+1-758' },
+      { name: 'Saint Vincent and the Grenadines', code: '+1-784' },
+      { name: 'Samoa', code: '+685' },
+      { name: 'San Marino', code: '+378' },
+      { name: 'Sao Tome and Principe', code: '+239' },
+      { name: 'Saudi Arabia', code: '+966' },
+      { name: 'Senegal', code: '+221' },
+      { name: 'Serbia', code: '+381' },
+      { name: 'Seychelles', code: '+248' },
+      { name: 'Sierra Leone', code: '+232' },
+      { name: 'Singapore', code: '+65' },
+      { name: 'Slovakia', code: '+421' },
+      { name: 'Slovenia', code: '+386' },
+      { name: 'Solomon Islands', code: '+677' },
+      { name: 'Somalia', code: '+252' },
+      { name: 'South Africa', code: '+27' },
+      { name: 'South Korea', code: '+82' },
+      { name: 'South Sudan', code: '+211' },
+      { name: 'Spain', code: '+34' },
+      { name: 'Sri Lanka', code: '+94' },
+      { name: 'Sudan', code: '+249' },
+      { name: 'Suriname', code: '+597' },
+      { name: 'Sweden', code: '+46' },
+      { name: 'Switzerland', code: '+41' },
+      { name: 'Syria', code: '+963' },
+      { name: 'Taiwan', code: '+886' },
+      { name: 'Tajikistan', code: '+992' },
+      { name: 'Tanzania', code: '+255' },
+      { name: 'Thailand', code: '+66' },
+      { name: 'Timor-Leste', code: '+670' },
+      { name: 'Togo', code: '+228' },
+      { name: 'Tonga', code: '+676' },
+      { name: 'Trinidad and Tobago', code: '+1-868' },
+      { name: 'Tunisia', code: '+216' },
+      { name: 'Turkey', code: '+90' },
+      { name: 'Turkmenistan', code: '+993' },
+      { name: 'Tuvalu', code: '+688' },
+      { name: 'Uganda', code: '+256' },
+      { name: 'Ukraine', code: '+380' },
+      { name: 'United Arab Emirates', code: '+971' },
+      { name: 'United Kingdom', code: '+44' },
+      { name: 'United States', code: '+1' },
+      { name: 'Uruguay', code: '+598' },
+      { name: 'Uzbekistan', code: '+998' },
+      { name: 'Vanuatu', code: '+678' },
+      { name: 'Vatican City', code: '+39' },
+      { name: 'Venezuela', code: '+58' },
+      { name: 'Vietnam', code: '+84' },
+      { name: 'Yemen', code: '+967' },
+      { name: 'Zambia', code: '+260' },
+      { name: 'Zimbabwe', code: '+263' },
+    ];
+    // Robust search: match by name or code, ignore case, ignore spaces, ignore dashes
+    const filteredCountries = countryOptions.filter(c => {
+      const search = countrySearch.toLowerCase().replace(/[^\d\w+]/g, '');
+      const name = c.name.toLowerCase().replace(/[^\d\w+]/g, '');
+      const code = c.code.replace(/[^\d+]/g, '');
+      return name.includes(search) || code.includes(search.replace(/[^\d+]/g, ''));
+    });
+    // Combine country code and phone for OTP
+    useEffect(() => {
+      setPhoneNumber(country.code + rawPhone);
+    }, [country, rawPhone]);
   const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState('chats');
 
@@ -68,40 +283,47 @@ export default function App() {
 
   // ─── Android Runtime Permissions ──────────────────────────────────────────────
 
+  // Improved permission check for camera/mic
   const requestMediaPermissions = async (needsVideo: boolean = false): Promise<boolean> => {
     try {
       // Check if we're on native platform (Android/iOS via Capacitor)
-      const isNative = (window as any).Capacitor || (window as any).capacitor;
-      
+      const isNative = (window as any).Capacitor?.isNativePlatform?.() ||
+        (window as any).Capacitor?.platform === 'android' ||
+        (window as any).Capacitor?.platform === 'ios';
+
       if (isNative) {
-        // Try using Permissions API if available (Capacitor 5+)
         try {
-          const Capacitor = (window as any).Capacitor;
-          if (Capacitor?.Plugins?.Permissions) {
-            const permissions = ['android.permission.RECORD_AUDIO'];
-            if (needsVideo) permissions.push('android.permission.CAMERA');
-            
-            const status = await Capacitor.Plugins.Permissions.requestPermissions({
-              permissions
-            });
-            
-            return status?.permissions ? true : false;
+          const { Camera, Microphone } = (window as any).Capacitor?.Plugins || {};
+          // Request microphone permission
+          if (Microphone) {
+            const micStatus = await Microphone.requestPermissions();
+            if (micStatus?.microphone === 'denied') return false;
           }
+          // Request camera permission if needed
+          if (needsVideo && Camera) {
+            const camStatus = await Camera.requestPermissions();
+            if (camStatus?.camera === 'denied') return false;
+          }
+          // On native, permissions are handled by the OS — return true after requesting
+          return true;
         } catch (e) {
-          console.warn('Permissions plugin not available, using browser prompt');
+          // If Capacitor plugins fail, fall through to browser getUserMedia
         }
-        
-        // For older Capacitor versions, just return true and let native handle it
-        // The browser will prompt for permissions when getUserMedia is called
+      }
+
+      // Browser path: use getUserMedia to trigger the permission prompt
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: needsVideo });
+        // Stop all tracks immediately — we only needed the permission grant
+        stream.getTracks().forEach(t => t.stop());
+        return true;
+      } catch (err: any) {
+        // NotAllowedError means denied; other errors (NotFoundError etc.) we still allow through
+        if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') return false;
         return true;
       }
-      
-      // On web, permissions will be handled by browser
-      return true;
     } catch (err) {
-      console.error('Permission request error:', err);
-      // Return true to allow the call to continue (browser will show native prompt)
-      return true;
+      return false;
     }
   };
 
@@ -205,14 +427,17 @@ export default function App() {
 
   useEffect(() => {
     const unsub = onAuthChange(async (user) => {
-      if (user) {
-        const profile = await getUserProfile(user.uid);
-        if (profile) {
-          setUserId(user.uid);
-          setUserProfile(profile);
-          setOnline(user.uid);
-          setupSignalListener(user.uid);
-        }
+      if (!user) return;
+
+      // Always enable signaling for this user as soon as auth is ready.
+      // Profile can be missing temporarily; that must not block call reception.
+      setUserId(user.uid);
+      setupSignalListener(user.uid);
+
+      const profile = await getUserProfile(user.uid);
+      if (profile) {
+        setUserProfile(profile);
+        setOnline(user.uid);
       }
     });
     return () => unsub();
@@ -264,19 +489,19 @@ export default function App() {
     setChats([supportChat]);
 
     // Listen to incoming chats from other users
-    const unsubUserChats = listenUserChats(userId, (incomingChats) => {
-      setChats(prev => {
-        const groups = prev.filter(c => c.isGroup);
-        const support = prev.find(c => c.id === 'support') || supportChat;
+    const unsubUserChats = listenUserChats(userId, (incomingChats: Chat[]) => {
+      setChats((prev: Chat[]) => {
+        const groups = prev.filter((c: Chat) => c.isGroup);
+        const support = prev.find((c: Chat) => c.id === 'support') || supportChat;
         // Merge incoming chats, avoid duplicates
-        const merged = [support, ...incomingChats.filter(c => c.id !== 'support'), ...groups];
+        const merged = [support, ...incomingChats.filter((c: Chat) => c.id !== 'support'), ...groups];
         return merged;
       });
     });
 
     // Listen to groups
-    const unsub = listenUserGroups(userId, (groups) => {
-      const groupChats: Chat[] = groups.map(g => ({
+    const unsub = listenUserGroups(userId, (groups: any[]) => {
+      const groupChats: Chat[] = groups.map((g: any) => ({
         id: g.id,
         name: g.name,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name)}&background=008751&color=fff`,
@@ -285,13 +510,25 @@ export default function App() {
         unread: 0,
         isGroup: true
       }));
-      setChats(prev => {
-        const nonGroup = prev.filter(c => !c.isGroup);
+      setChats((prev: Chat[]) => {
+        const nonGroup = prev.filter((c: Chat) => !c.isGroup);
         return [...nonGroup, ...groupChats];
       });
     });
     return () => { unsub(); unsubUserChats(); };
   }, [userId]);
+
+  // ─── Mark messages as delivered when user is online ───────────────────────
+  // Fires whenever the chat list updates — marks all received messages as
+  // 'delivered' (double gray tick) even if the user hasn't opened the chat yet.
+  useEffect(() => {
+    if (!userId || chats.length === 0) return;
+    chats.forEach((chat: Chat) => {
+      if (chat.isGroup) return;
+      const chatId = getChatId(userId, chat.id);
+      markMessagesDelivered(chatId, userId).catch(() => {});
+    });
+  }, [chats.length, userId]);
 
   // â”€â”€â”€ Statuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -311,25 +548,34 @@ export default function App() {
       ? activeChat.id
       : getChatId(userId, activeChat.id);
 
-    unsubMessages.current = listenMessages(chatId, (msgs) => {
-      // Filter expired
-      const now = Date.now();
-      setMessages(msgs.filter(m => !m.expiresAt || m.expiresAt > now));
-      // Mark as read
-      markMessagesRead(chatId, userId);
-      // Reset unread
-      setChats(prev => prev.map(c => c.id === activeChat.id ? { ...c, unread: 0 } : c));
+    unsubMessages.current = listenMessages(chatId, (msgs: Message[]) => {
+      try {
+        // Filter expired
+        const now = Date.now();
+        setMessages(msgs.filter((m: Message) => !m.expiresAt || m.expiresAt > now));
+        // Mark messages as read — user is actively viewing this chat (turns green)
+        markMessagesRead(chatId, userId);
+        // Reset unread
+        setChats((prev: Chat[]) => prev.map((c: Chat) => c.id === activeChat.id ? { ...c, unread: 0 } : c));
+      } catch (err) {
+        alert('Error receiving messages. Please check your connection.');
+        console.error('Message listener error:', err);
+      }
     });
 
-    unsubTyping.current = listenTyping(chatId, userId, (typingUid) => {
-      setChats(prev => prev.map(c =>
+    unsubTyping.current = listenTyping(chatId, userId, (typingUid: string | null) => {
+      setChats((prev: Chat[]) => prev.map((c: Chat) =>
         c.id === activeChat.id ? { ...c, typing: !!typingUid } : c
       ));
     });
 
     return () => {
-      unsubMessages.current?.();
-      unsubTyping.current?.();
+      try {
+        unsubMessages.current?.();
+        unsubTyping.current?.();
+      } catch (err) {
+        console.warn('Error cleaning up listeners:', err);
+      }
     };
   }, [activeChat?.id, userId]);
 
@@ -338,6 +584,10 @@ export default function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  // TypeScript helper types for callbacks
+  type PrevChat = Chat[];
+  type PrevMsg = Message[];
 
   // â”€â”€â”€ Local video ref â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -364,7 +614,7 @@ export default function App() {
       if (!activeChat || messages.length === 0 || !userId) return;
       const last = messages[messages.length - 1];
       if (last.senderId === userId) { setAiSuggestions([]); return; }
-      const lastFew = messages.slice(-5).map(m => m.content);
+      const lastFew = messages.slice(-5).map((m: Message) => m.content);
       const suggestions = await getAiSuggestions(lastFew);
       setAiSuggestions(suggestions);
     }, 1000);
@@ -375,7 +625,7 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setMessages(prev => prev.filter(m => !m.expiresAt || m.expiresAt > Date.now()));
+      setMessages((prev: Message[]) => prev.filter((m: Message) => !m.expiresAt || m.expiresAt > Date.now()));
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -384,7 +634,7 @@ export default function App() {
 
   useEffect(() => {
     let interval: any;
-    if (isRecording) interval = setInterval(() => setRecordingDuration(d => d + 1), 1000);
+    if (isRecording) interval = setInterval(() => setRecordingDuration((d: number) => d + 1), 1000);
     return () => clearInterval(interval);
   }, [isRecording]);
 
@@ -443,10 +693,11 @@ export default function App() {
           });
         }
       } else if (signal.type === 'call:answer') {
-        // Fallback for old signaling - receiver answered with 'call:answer'
-        if (calling && !calling.incoming && signal.payload.transport === 'webrtc') {
-          createWebRTCCall(calling.type, signal.fromId, false, signal.payload.sdp);
-        }
+        // Stop ring
+        if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval=null; }
+        const peer = peersRef.current.get(signal.fromId);
+        if (peer) peer.signal(signal.payload.sdp);
+        setCalling((prev) => prev ? { ...prev, incoming: false } : null);
       } else if (signal.type === 'call:reject' || signal.type === 'call:end') {
         if ((window as any)._ringInterval) { clearInterval((window as any)._ringInterval); (window as any)._ringInterval = null; }
         cleanupCall();
@@ -729,329 +980,6 @@ export default function App() {
       setLoginLoading(false);
     }
   };
-  const handleVerifyOTP = async (e) => {
-    e.preventDefault();
-    if (!confirmationResult || otp.length < 4) return;
-    setLoginLoading(true);
-    setOtpError('');
-    try {
-      const user = await verifyOTP(confirmationResult, otp);
-      const profile = await getUserProfile(user.uid);
-      setUserId(user.uid);
-      setUserProfile(profile);
-      setOnline(user.uid);
-      setupSignalListener(user.uid);
-      setShowWelcome(true);
-    } catch (err: any) {
-      const code = err?.code || '';
-      if (code === 'auth/invalid-verification-code') {
-        setOtpError('Invalid OTP. Please check the code and try again.');
-      } else if (code === 'auth/code-expired') {
-        setOtpError('OTP expired. Request a new code.');
-        setOtpSent(false);
-      } else {
-        setOtpError('Invalid OTP. Please try again.');
-      }
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handleEmailSignUp = async (e) => {
-    e.preventDefault();
-    if (!email || !password || !displayName) return;
-    setLoginLoading(true);
-    setOtpError('');
-    try {
-      const user = await signUpWithEmail(email, password, displayName);
-      const profile = await getUserProfile(user.uid);
-      setUserId(user.uid);
-      setUserProfile(profile);
-      setOnline(user.uid);
-      setupSignalListener(user.uid);
-      setShowWelcome(true);
-    } catch (err: any) {
-      const code = err?.code || '';
-      if (code === 'auth/email-already-in-use') {
-        setOtpError('Email already in use. Try signing in instead.');
-      } else if (code === 'auth/weak-password') {
-        setOtpError('Password is too weak. Please choose a stronger password.');
-      } else if (code === 'auth/invalid-email') {
-        setOtpError('Invalid email address.');
-      } else {
-        setOtpError('Failed to sign up. Please try again.');
-      }
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handleEmailSignIn = async (e) => {
-    e.preventDefault();
-    if (!email || !password) return;
-    setLoginLoading(true);
-    setOtpError('');
-    try {
-      const user = await signInWithEmail(email, password);
-      const profile = await getUserProfile(user.uid);
-      setUserId(user.uid);
-      setUserProfile(profile);
-      setOnline(user.uid);
-      setupSignalListener(user.uid);
-    } catch (err: any) {
-      const code = err?.code || '';
-      if (code === 'auth/user-not-found' || code === 'auth/wrong-password') {
-        setOtpError('Invalid email or password.');
-      } else if (code === 'auth/invalid-email') {
-        setOtpError('Invalid email address.');
-      } else {
-        setOtpError('Failed to sign in. Please try again.');
-      }
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handlePasswordReset = async () => {
-    if (!email) {
-      setOtpError('Please enter your email first.');
-      return;
-    }
-    try {
-      await sendPasswordReset(email);
-      setOtpError('Password reset email sent. Check your inbox.');
-    } catch (err: any) {
-      setOtpError('Failed to send reset email. Please try again.');
-    }
-  };
-
-  // â”€â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || !activeChat || !userId) return;
-    const text = inputText;
-    setInputText('');
-    const chatId = activeChat.isGroup ? activeChat.id : getChatId(userId, activeChat.id);
-    setTyping(chatId, userId, false);
-    await fbSendMessage(userId, activeChat.id, text, 'text', !!activeChat.isGroup, activeChat.disappearingTimer || 0);
-    setChats(prev => prev.map(c =>
-      c.id === activeChat.id ? { ...c, lastMessage: text, time: 'Just now' } : c
-    ));
-  };
-
-  const handleTyping = (text: string) => {
-    setInputText(text);
-    if (activeChat && userId) {
-      const chatId = activeChat.isGroup ? activeChat.id : getChatId(userId, activeChat.id);
-      setTyping(chatId, userId, text.length > 0);
-    }
-  };
-
-  // â”€â”€â”€ File upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeChat || !userId) return;
-    try {
-      const url = await uploadFile(file, 'media');
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      await fbSendMessage(userId, activeChat.id, url, type, !!activeChat.isGroup);
-    } catch (err) { console.error('Upload failed', err); }
-  };
-
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !userId) return;
-    try {
-      const url = await uploadFile(file, 'avatars');
-      const updated = await updateUserProfile(userId, { avatarUrl: url });
-      setUserProfile(updated);
-    } catch (err) { console.error('Avatar upload failed', err); }
-  };
-
-  const handlePostStatus = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !userId) return;
-    try {
-      const url = await uploadFile(file, 'statuses');
-      const type = file.type.startsWith('video') ? 'video' : 'image';
-      await postStatus(userId, url, type);
-    } catch (err) { console.error('Status post failed', err); }
-  };
-
-  // â”€â”€â”€ Voice recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const startRecording = async () => {
-    try {
-      // Request Android permissions
-      const hasPermission = await requestMediaPermissions(false);
-      if (!hasPermission) {
-        alert('Microphone permission is required for voice recording.');
-        return;
-      }
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => chunks.push(e.data);
-      recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const file = new File([blob], 'voice_note.webm', { type: 'audio/webm' });
-        if (activeChat && userId) {
-          const url = await uploadFile(file, 'audio');
-          await fbSendMessage(userId, activeChat.id, url, 'audio', !!activeChat.isGroup);
-        }
-        stream.getTracks().forEach(t => t.stop());
-      };
-      recorder.start();
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-      setRecordingDuration(0);
-    } catch (err) { console.error('Recording failed', err); }
-  };
-
-  const stopRecording = () => { mediaRecorder?.stop(); setIsRecording(false); };
-
-  // â”€â”€â”€ New chat / group â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleStartNewChat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const num = newChatNumber.trim();
-    if (!num) return;
-    try {
-      const userData = await searchUserByPhone(num);
-      if (!userData || userData.virtual) {
-        alert('User not found on 9jaTalk.\n\nMake sure:\n• They have registered at 9jatalk.vercel.app\n• You enter their exact number with country code (e.g. +917066373342)');
-        return;
-      }
-      const newChat: Chat = {
-        id: userData.id,
-        name: userData.username || userData.phoneNumber || `User ${num}`,
-        avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
-        lastMessage: '',
-        time: 'Now',
-        unread: 0
-      };
-      setChats(prev => prev.find(c => c.id === newChat.id) ? prev : [newChat, ...prev]);
-      setActiveChat(newChat);
-      setShowNewChat(false);
-      setNewChatNumber('');
-    } catch (err) {
-      alert('Error finding user. Please try again.');
-    }
-  };
-
-  // Pick contacts from device and find who's on 9jaTalk
-  const handlePickContacts = async () => {
-    try {
-      if (!(navigator as any).contacts) {
-        alert('Contact picker not supported on this device. Enter the number manually.');
-        return;
-      }
-      const contacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: true });
-      if (!contacts || contacts.length === 0) return;
-
-      const found: Chat[] = [];
-      for (const contact of contacts) {
-        for (const tel of (contact.tel || [])) {
-          const cleaned = tel.replace(/\s+/g, '');
-          const userData = await searchUserByPhone(cleaned);
-          if (userData && !userData.virtual) {
-            found.push({
-              id: userData.id,
-              name: contact.name?.[0] || userData.username || cleaned,
-              avatar: userData.avatarUrl || `https://i.pravatar.cc/150?u=${userData.id}`,
-              lastMessage: '',
-              time: 'Now',
-              unread: 0
-            });
-          }
-        }
-      }
-
-      if (found.length === 0) {
-        alert('None of your selected contacts are on 9jaTalk yet.');
-        return;
-      }
-
-      // Add all found contacts to chat list
-      setChats(prev => {
-        const existing = new Set(prev.map(c => c.id));
-        const newOnes = found.filter(c => !existing.has(c.id));
-        return [...newOnes, ...prev];
-      });
-
-      // Open first found contact
-      setActiveChat(found[0]);
-      setShowNewChat(false);
-      setIsSidebarOpen(false);
-    } catch (err) {
-      console.error('Contact picker failed', err);
-    }
-  };
-
-  const handleCreateGroup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!groupName || !userId) return;
-    const groupId = await createGroup(groupName, userId, []);
-    const newGroup: Chat = {
-      id: groupId,
-      name: groupName,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=008751&color=fff`,
-      lastMessage: 'Group created',
-      time: 'Now',
-      unread: 0,
-      isGroup: true
-    };
-    setChats(prev => [newGroup, ...prev]);
-    setActiveChat(newGroup);
-    setShowGroupModal(false);
-    setGroupName('');
-    setIsSidebarOpen(false);
-  };
-
-  const selectChat = (chat: Chat) => {
-    setActiveChat(chat);
-    setIsSidebarOpen(false);
-    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c));
-  };
-
-  // â”€â”€â”€ Profile update â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleUpdateProfile = async (updates: any) => {
-    if (!userId) return;
-    const updated = await updateUserProfile(userId, updates);
-    setUserProfile(updated);
-  };
-
-  // â”€â”€â”€ Reactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleReact = async (messageId: string, emoji: string) => {
-    if (!activeChat || !userId) return;
-    const chatId = activeChat.isGroup ? activeChat.id : getChatId(userId, activeChat.id);
-    await reactToMessage(chatId, messageId, userId, emoji);
-  };
-
-  // â”€â”€â”€ Translation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleTranslate = async (msgId: string, text: string) => {
-    setTranslatingId(msgId);
-    const translated = await translateText(text, 'English');
-    setTranslatedMessages(prev => ({ ...prev, [msgId]: translated }));
-    setTranslatingId(null);
-  };
-
-  // â”€â”€â”€ Disappearing timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const setChatDisappearingTimer = async (seconds: number) => {
-    if (!activeChat) return;
-    setChats(prev => prev.map(c =>
-      c.id === activeChat.id ? { ...c, disappearingTimer: seconds } : c
-    ));
-    setActiveChat(prev => prev ? { ...prev, disappearingTimer: seconds } : prev);
-  };
-
 
   const formatTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1069,7 +997,7 @@ export default function App() {
         </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center"
+          className="bg-white/90 p-8 rounded-2xl shadow-xl w-full max-w-md text-center backdrop-blur-md"
         >
           <img src='/logo.png' className='w-36 h-36 object-contain mx-auto mb-2' style={{mixBlendMode:'multiply'}} alt='9jaTalk'/>
 
@@ -1091,7 +1019,8 @@ export default function App() {
             </button>
           </div>
 
-          <div id="recaptcha-container"></div>
+          {/* Only show recaptcha on login page, never in the app */}
+          {!userId && <div id="recaptcha-container"></div>}
           
           {loginMethod === 'phone' ? (
             <>
@@ -1543,7 +1472,7 @@ export default function App() {
                               <span className="text-[10px] text-gray-400">{formatTime(msg.timestamp)}</span>
                               {isMine && (
                                 msg.status === 'read'
-                                  ? <CheckCheck className="w-3.5 h-3.5 text-blue-500" />
+                                  ? <CheckCheck className="w-3.5 h-3.5 text-green-500" />
                                   : msg.status === 'delivered'
                                   ? <CheckCheck className="w-3.5 h-3.5 text-gray-400" />
                                   : <Check className="w-3.5 h-3.5 text-gray-400" />

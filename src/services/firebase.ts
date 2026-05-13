@@ -75,6 +75,11 @@ export const sendOTP = async (
       }
     }
   });
+  (window as any).recaptchaVerifierInstance = recaptchaVerifier;
+
+  // Hide the recaptcha container (just in case)
+  const el = document.getElementById(recaptchaContainerId);
+  if (el) el.style.display = 'none';
 
   // Force token refresh
   await recaptchaVerifierInstance.verify();
@@ -373,6 +378,19 @@ export const listenUserChats = (
     cb(chatList);
   });
   return () => off(chatMetaRef);
+};
+
+export const markMessagesDelivered = async (chatId: string, receiverId: string) => {
+  const snap = await get(ref(db, `messages/${chatId}`));
+  if (!snap.exists()) return;
+  const updates: Record<string, any> = {};
+  Object.entries(snap.val() as Record<string, any>).forEach(([key, msg]: any) => {
+    // Only mark as delivered if the message was sent TO this user and is still 'sent'
+    if (msg.receiverId === receiverId && msg.status === 'sent') {
+      updates[`messages/${chatId}/${key}/status`] = 'delivered';
+    }
+  });
+  if (Object.keys(updates).length > 0) await update(ref(db), updates);
 };
 
 export const markMessagesRead = async (chatId: string, readerId: string) => {

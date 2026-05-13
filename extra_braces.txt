@@ -1,0 +1,16 @@
+Line 656 (depth=7, +1):             const playRing = () => {
+Line 674 (depth=7, +1):             requestMediaPermissions(true).then(async (hasPermission) => {
+Line 675 (depth=8, +1):               if (hasPermission) {
+Line 676 (depth=9, +1):                 try {
+Line 1028 (depth=7, +1):                   {otpCooldown > 0 && (
+Line 1434 (depth=7, +1):                             {activeChat.isGroup && !isMine && (
+Line 1441 (depth=7, +1):                             {msg.type === 'image' ? (
+Line 1460 (depth=7, +1):                             {translated && (
+Line 1469 (depth=7, +1):                               {isMine && (
+Line 1480 (depth=7, +1):                           {reactions.length > 0 && (
+Line 1482 (depth=8, +1):                               {reactions.slice(0, 5).map((emoji, i) => (
+Line 1492 (depth=7, +1):                             {['👍', '❤️', '😂', '😮', '😢'].map((emoji) => (
+Line 1550 (depth=7, +1):                       if (e.key === 'Enter' && !e.shiftKey) {
+Line 1751 (depth=7, +1):                           {status.type === 'image' ? (
+Line 2077 (depth=7, +2):                       onClick={() => {
+Line 2078 (depth=8, +1):                         if (confirm('Sign out of 9jaTalk?')) {

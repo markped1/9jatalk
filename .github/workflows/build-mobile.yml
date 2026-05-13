@@ -1,0 +1,55 @@
+name: Build Android & iOS Apps
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - "*"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    name: Build Android APK
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Grant execute permission to gradlew
+        run: chmod +x ./android/gradlew
+      - name: Build APK
+        working-directory: ./android
+        run: ./gradlew assembleRelease
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+
+  build-ios:
+    runs-on: macos-latest
+    name: Build iOS App
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app || true
+      - name: Install CocoaPods dependencies
+        working-directory: ./ios
+        run: pod install
+      - name: Build iOS app (Simulator)
+        working-directory: ./ios
+        run: |
+          xcodebuild -workspace App/App.xcworkspace -scheme App -sdk iphonesimulator -configuration Release build
+      - name: Upload iOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-build
+          path: ios/App/build/Release-iphonesimulator/*.app
